@@ -5,22 +5,29 @@ the observability headers used by the backend.
 
 ## Run With Local Observability
 
-From the repository root, start the backend dependencies and API:
+This repository was extracted from
+`movie-reservation-platform-lab/golden-path-ecs-template` so the frontend can
+have an independent CI and static artifact pipeline. Keep the golden-path copy
+as the migration source until this repository passes CI and an AWS smoke check.
+
+Start the backend dependencies and API from the reservation service or platform
+runtime workspace:
 
 ```sh
 docker compose up -d postgres
 docker compose --profile observability up -d otel-collector
-npm -w movie-reservation-service run db:migrate:local-postgres
-npm -w movie-reservation-service run db:seed:local-postgres
+npm run db:migrate:local-postgres
+npm run db:seed:local-postgres
 docker compose --profile api up -d --build api
 ```
 
 Then start the frontend:
 
 ```sh
-mkdir -p movie-reservation-web/env_files/local
-cp movie-reservation-web/env_files/templates/local/local-dev.env.template movie-reservation-web/env_files/local/local-dev.env
-npm -w movie-reservation-web run dev
+npm ci
+mkdir -p env_files/local
+cp env_files/templates/local/local-dev.env.template env_files/local/local-dev.env
+npm run dev
 ```
 
 Open:
@@ -33,9 +40,8 @@ The frontend sends GraphQL requests through Vite's `/graphql` proxy. By default
 the proxy targets `http://127.0.0.1:3001`, which matches the containerized API
 profile documented in `docs/workflows/local-observability.md`.
 
-The frontend dev script loads
-`movie-reservation-web/env_files/local/local-dev.env`. Edit that rendered file
-if your API runs on another port:
+The frontend dev script loads `env_files/local/local-dev.env`. Edit that
+rendered file if your API runs on another port:
 
 ```env
 VITE_API_PROXY_TARGET=http://127.0.0.1:3000
@@ -68,3 +74,10 @@ Optional local-only settings:
 The current backend API returns auditorium seats, not a dedicated availability
 calculation. Already-reserved seeded seats are still clickable and should become
 useful rejection demos.
+
+## Deployment Contract
+
+The production target is a Vite static build deployed by platform
+infrastructure to private S3 behind CloudFront. This repository should publish
+the immutable frontend artifact; environment composition belongs to the platform
+environment/infra repos.

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+
+env_files/local/
+
+.env
+.env.*
+!.env.example
