@@ -19,19 +19,184 @@ jobs:
     name: check
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: read
+    outputs:
+      oci_digest: ${{ steps.package_oci.outputs.digest }}
+      oci_layout_artifact_name: ${{ steps.package_oci.outputs.oci_layout_artifact_name }}
+      oci_repository: ${{ steps.package_oci.outputs.oci_repository }}
+      oci_candidate_tag: ${{ steps.package_oci.outputs.oci_candidate_tag }}
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Set reproducible build time
+        run: echo "SOURCE_DATE_EPOCH=$(git show -s --format=%ct HEAD)" >> "${GITHUB_ENV}"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run web checks
+        run: npm run check:web
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1.2.4
+        with:
+          url: https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_amd64.tar.gz
+          checksum: 9ce999f8d2de03fc03968b29d743077a58783e545e5eaa53917ca177352d0e59
+
+      - name: Package static site as a local OCI artifact
+        id: package_oci
+        run: |
+          artifact_name="$(jq -r '.artifact.name // empty' dist/static-artifact-contract.json)"
+          artifact_type="$(jq -r '.distribution.oci.artifactType // empty' dist/static-artifact-contract.json)"
+          layer_media_type="$(jq -r '.distribution.oci.layerMediaType // empty' dist/static-artifact-contract.json)"
+          oci_registry="$(jq -r '.distribution.oci.registry // empty' dist/static-artifact-contract.json)"
+          oci_repository="$(jq -r '.distribution.oci.repository // empty' dist/static-artifact-contract.json)"
+          oci_candidate_tag="$(jq -r '.distribution.oci.candidateTag // empty' dist/static-artifact-contract.json)"
+          workflow_artifact_name="$(jq -r '.distribution.workflowArtifactName // empty' dist/static-artifact-contract.json)"
+          expected_workflow_artifact_name="${artifact_name}-static-${GITHUB_SHA}"
+          oci_layout_artifact_name="${artifact_name}-oci-layout-${GITHUB_SHA}"
+          if [[ -z "${artifact_name}" || -z "${artifact_type}" || -z "${layer_media_type}" || -z "${oci_registry}" ]]; then
+            echo "Static artifact contract did not contain complete OCI metadata" >&2
+            exit 1
+          fi
+          if [[ "${oci_registry}" != "ghcr.io" ]]; then
+            echo "Static artifacts may only be published to the trusted ghcr.io registry" >&2
+            exit 1
+          fi
+          if [[ "${oci_repository}" != "${GITHUB_REPOSITORY}" || "${oci_candidate_tag}" != "sha-${GITHUB_SHA}" ]]; then
+            echo "Static artifact contract provenance did not match the workflow source" >&2
+            exit 1
+          fi
+          if [[ "${workflow_artifact_name}" != "${expected_workflow_artifact_name}" ]]; then
+            echo "Static artifact contract reported unexpected workflow artifact name: ${workflow_artifact_name}" >&2
+            exit 1
+          fi
+
+          artifact_created_at="$(date --utc --date="@${SOURCE_DATE_EPOCH}" +'%Y-%m-%dT%H:%M:%SZ')"
+          oras push \
+            --oci-layout "oci-layout:sha-${GITHUB_SHA}" \
+            --artifact-type "${artifact_type}" \
+            --annotation "org.opencontainers.image.created=${artifact_created_at}" \
+            --annotation "org.opencontainers.image.source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" \
+            --annotation "org.opencontainers.image.revision=${GITHUB_SHA}" \
+            "dist/:${layer_media_type}" \
+            --format json > oci-layout-result.json
+
+          digest="$(jq -r '.digest // empty' oci-layout-result.json)"
+          packaged_artifact_type="$(jq -r '.artifactType // empty' oci-layout-result.json)"
+          if [[ ! "${digest}" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "ORAS did not report a valid OCI manifest digest" >&2
+            exit 1
+          fi
+          if [[ "${packaged_artifact_type}" != "${artifact_type}" ]]; then
+            echo "ORAS reported unexpected artifact type: ${packaged_artifact_type}" >&2
+            exit 1
+          fi
+
+          echo "digest=${digest}" >> "${GITHUB_OUTPUT}"
+          echo "oci_layout_artifact_name=${oci_layout_artifact_name}" >> "${GITHUB_OUTPUT}"
+          echo "oci_repository=${oci_repository}" >> "${GITHUB_OUTPUT}"
+          echo "oci_candidate_tag=${oci_candidate_tag}" >> "${GITHUB_OUTPUT}"
+          echo "workflow_artifact_name=${workflow_artifact_name}" >> "${GITHUB_OUTPUT}"
+          echo "Static-site candidate OCI digest: \`${digest}\`" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload static artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.package_oci.outputs.workflow_artifact_name }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload OCI layout for publication
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ steps.package_oci.outputs.oci_layout_artifact_name }}
+          path: oci-layout/
+          if-no-files-found: error
+          retention-days: 14
+
+  automation-quality:
+    name: automation-quality
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
-      - name: Run web checks
-        run: npm run check
+      - name: Run repository automation tests
+        run: npm run test:automation
+
+  publish-static-artifact:
+    name: publish-static-artifact
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - automation-quality
+      - check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+      packages: write
+    steps:
+      - name: Download tested OCI layout
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: ${{ needs.check.outputs.oci_layout_artifact_name }}
+          path: oci-layout
+
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@22ce207df3b08e061f537244349aac6ae1d214f6 # v1.2.4
+        with:
+          url: https://github.com/oras-project/oras/releases/download/v1.3.3/oras_1.3.3_linux_amd64.tar.gz
+          checksum: 9ce999f8d2de03fc03968b29d743077a58783e545e5eaa53917ca177352d0e59
+
+      - name: Log in to GitHub Container Registry
+        env:
+          GHCR_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "${GHCR_PASSWORD}" | oras login ghcr.io --username "${GITHUB_ACTOR}" --password-stdin
+
+      - name: Publish immutable static-site candidate
+        env:
+          EXPECTED_DIGEST: ${{ needs.check.outputs.oci_digest }}
+          STATIC_ARTIFACT_REPOSITORY: ${{ needs.check.outputs.oci_repository }}
+          STATIC_ARTIFACT_TAG: ${{ needs.check.outputs.oci_candidate_tag }}
+        run: |
+          candidate_repository="ghcr.io/${STATIC_ARTIFACT_REPOSITORY}"
+          candidate_ref="${candidate_repository}:${STATIC_ARTIFACT_TAG}"
+          oras cp --from-oci-layout "oci-layout:sha-${GITHUB_SHA}" "${candidate_ref}"
+
+          published_digest="$(oras resolve "${candidate_ref}")"
+          if [[ "${published_digest}" != "${EXPECTED_DIGEST}" ]]; then
+            echo "Published digest ${published_digest} did not match tested digest ${EXPECTED_DIGEST}" >&2
+            exit 1
+          fi
+
+          echo "Published static-site candidate: \`${candidate_repository}@${published_digest}\`" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Provenance tag: \`${candidate_ref}\`" >> "${GITHUB_STEP_SUMMARY}"

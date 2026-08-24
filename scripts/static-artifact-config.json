@@ -1,0 +1,6 @@
+{
+  "artifactKind": "static-site-bundle",
+  "registry": "ghcr.io",
+  "artifactType": "application/vnd.movie-platform.static-site.v1",
+  "layerMediaType": "application/vnd.movie-platform.static-site.layer.v1.tar"
+}

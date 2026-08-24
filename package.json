@@ -7,10 +7,15 @@
     "dev": "npm run dev:local",
     "dev:local": "node --env-file=env_files/local/local-dev.env ./node_modules/vite/bin/vite.js --host 127.0.0.1",
     "build": "tsc -p tsconfig.json && vite build",
+    "artifact:contract": "node scripts/write-static-artifact-contract.mjs",
+    "build:static-artifact": "npm run build && npm run artifact:contract",
     "preview": "vite preview --host 127.0.0.1",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "check": "npm run typecheck && npm run test && npm run build"
+    "test": "npm run test:web",
+    "test:web": "vitest run --config vitest.config.ts",
+    "test:automation": "vitest run --config automation/vitest.config.ts",
+    "check:web": "npm run typecheck && npm run test:web && npm run build:static-artifact",
+    "check": "npm run check:web && npm run test:automation"
   },
   "dependencies": {
     "lucide-react": "^1.17.0",
