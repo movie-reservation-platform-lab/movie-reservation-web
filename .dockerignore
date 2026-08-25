@@ -1,0 +1,14 @@
+.git
+.github
+.ai
+.claude
+.codex
+.cursor
+.gemini
+.roo
+automation
+coverage
+dist
+docs
+env_files
+node_modules

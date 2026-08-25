@@ -48,6 +48,7 @@ rendered file if your API runs on another port:
 
 ```env
 VITE_API_PROXY_TARGET=http://127.0.0.1:3000
+VITE_AGENT_PROXY_TARGET=http://127.0.0.1:8080
 ```
 
 Optional local-only settings:
@@ -83,6 +84,14 @@ tests repository and artifact automation without mixing those checks into the
 frontend behavior test discovery path. Pull requests and manual runs never
 receive package write permission.
 
+For the temporary integrated ECS demo, CI also builds and smoke-tests a
+non-root Nginx image. A successful canonical `main` push publishes it as
+`ghcr.io/movie-reservation-platform-lab/movie-reservation-web:ecs-demo-sha-${GITHUB_SHA}`
+and reports its immutable digest. Docker BuildKit registry provenance is
+disabled for this temporary image so the first-slice admission tooling receives
+a single `linux/amd64` image manifest. The static OCI artifact remains the
+long-term deployment contract.
+
 The `sha-...` tag and package version are provenance hints, not deployment
 selectors. Environment releases select the immutable `sha256:...` OCI digest
 reported in the workflow summary.
@@ -101,9 +110,33 @@ npm run check
 4. Select one or more seats.
 5. Request a reservation.
 6. Watch polling move the request into a terminal state.
-7. Use the browser network panel to inspect the emitted propagation headers,
+7. Run the agent happy, slow, or controlled-error scenario.
+8. Use the browser network panel to inspect the emitted propagation headers,
    then search for the workflow in Grafana/Tempo/Loki. A future Playwright
    smoke test should capture the same workflow in an automated report.
+
+## Temporary ECS Image
+
+The issue #6 image is an explicit demo shortcut for one ECS task with multiple
+containers. It listens on port `8088`, serves the Vite build, and provides a
+stable `GET /health` endpoint. Nginx forwards same-origin requests over the
+task-local network namespace:
+
+- `/graphql` -> `http://127.0.0.1:3000`
+- `/api/v1/demo/*` -> `http://127.0.0.1:8080`
+
+The proxy explicitly preserves `traceparent`, `tracestate`,
+`X-Correlation-Id`, `X-Request-Id`, and `X-Demo-Fault`. Inspect these values in
+the browser network panel; the UI intentionally does not add a diagnostics
+panel.
+
+Build and smoke the image locally:
+
+```sh
+docker build --target prod -t movie-reservation-web:local .
+docker run --rm -p 8088:8088 movie-reservation-web:local
+curl http://127.0.0.1:8088/health
+```
 
 The current backend API returns auditorium seats, not a dedicated availability
 calculation. Already-reserved seeded seats are still clickable and should become

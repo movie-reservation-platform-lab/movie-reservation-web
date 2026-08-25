@@ -4,6 +4,7 @@ import { defineConfig, loadEnv } from "vite";
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   const apiTarget = env.VITE_API_PROXY_TARGET || "http://127.0.0.1:3001";
+  const agentTarget = env.VITE_AGENT_PROXY_TARGET || "http://127.0.0.1:8080";
 
   return {
     plugins: [react()],
@@ -12,6 +13,10 @@ export default defineConfig(({ mode }) => {
       proxy: {
         "/graphql": {
           target: apiTarget,
+          changeOrigin: true,
+        },
+        "/api/v1/demo": {
+          target: agentTarget,
           changeOrigin: true,
         },
       },
