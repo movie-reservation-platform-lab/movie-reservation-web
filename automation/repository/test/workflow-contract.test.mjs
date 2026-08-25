@@ -39,6 +39,24 @@ describe("repository and CI automation contract", () => {
     expect(workflow).not.toContain("pull_request_target:");
   });
 
+  it("keeps the temporary ECS image gated and single-manifest compatible", () => {
+    const smokeJob = readWorkflowJob("container-smoke");
+    const publishJob = readWorkflowJob("publish-ecs-image");
+
+    expect(smokeJob).toContain("load: true");
+    expect(smokeJob).toContain("provenance: false");
+    expect(smokeJob).not.toContain("packages: write");
+    expect(publishJob).toContain("github.event_name == 'push'");
+    expect(publishJob).toContain("github.ref == 'refs/heads/main'");
+    expect(publishJob).toContain("- automation-quality");
+    expect(publishJob).toContain("- check");
+    expect(publishJob).toContain("- container-smoke");
+    expect(publishJob).toContain("platforms: linux/amd64");
+    expect(publishJob).toContain("provenance: false");
+    expect(publishJob).toContain("packages: write");
+    expect(publishJob).toContain("ecs-demo-sha-${{ github.sha }}");
+  });
+
   it("pins every external action to a full commit SHA", () => {
     const actionReferences = [...workflow.matchAll(/^\s+uses:\s+(\S+)/gm)].map(
       (match) => match[1],

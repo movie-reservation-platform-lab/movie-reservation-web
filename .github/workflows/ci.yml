@@ -200,3 +200,94 @@ jobs:
 
           echo "Published static-site candidate: \`${candidate_repository}@${published_digest}\`" >> "${GITHUB_STEP_SUMMARY}"
           echo "Provenance tag: \`${candidate_ref}\`" >> "${GITHUB_STEP_SUMMARY}"
+
+  container-smoke:
+    name: temporary ECS image smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build temporary ECS image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          load: true
+          provenance: false
+          tags: movie-reservation-web:ci
+
+      - name: Start temporary ECS image
+        run: docker run --detach --name movie-reservation-web-ci --publish 18088:8088 movie-reservation-web:ci
+
+      - name: Verify temporary ECS image
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent --show-error http://127.0.0.1:18088/health; then
+              break
+            fi
+            sleep 1
+          done
+          curl --fail --silent --show-error http://127.0.0.1:18088/health | jq --exit-status '.status == "ok"'
+          curl --fail --silent --show-error http://127.0.0.1:18088/ | grep --fixed-strings '<div id="root"></div>'
+          test "$(docker exec movie-reservation-web-ci id -u)" != "0"
+
+      - name: Stop temporary ECS image
+        if: always()
+        run: docker rm --force movie-reservation-web-ci
+
+  publish-ecs-image:
+    name: publish temporary ECS image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - automation-quality
+      - check
+      - container-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish temporary ECS image
+        id: publish
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          provenance: false
+          push: true
+          tags: ghcr.io/${{ github.repository }}:ecs-demo-sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=ecs-demo-sha-${{ github.sha }}
+
+      - name: Report temporary ECS image
+        run: |
+          echo "Temporary ECS image: \`ghcr.io/${GITHUB_REPOSITORY}@${{ steps.publish.outputs.digest }}\`" >> "${GITHUB_STEP_SUMMARY}"
+          echo "Source tag: \`ecs-demo-sha-${GITHUB_SHA}\`" >> "${GITHUB_STEP_SUMMARY}"
