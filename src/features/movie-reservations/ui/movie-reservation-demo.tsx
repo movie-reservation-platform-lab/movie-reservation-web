@@ -2,12 +2,13 @@ import { useCallback, useMemo, useState } from "react";
 import { Activity, AlertTriangle, Film } from "lucide-react";
 
 import { createDemoTraceContext } from "../../../platform/observability/trace-context";
+import type { AgentReservationCallResult } from "../../../platform/api/agent-client";
 import { createMovieReservationApi } from "../adapters/graphql/movie-reservation-api";
 import { useGraphqlExchangeLog } from "../adapters/react/use-graphql-exchange-log";
 import { useMovieCatalog } from "../adapters/react/use-movie-catalog";
 import { useReservationWorkflow } from "../adapters/react/use-reservation-workflow";
+import { AgentPanel } from "./agent-panel";
 import { CatalogPanel } from "./catalog-panel";
-import { DiagnosticsPanel } from "./diagnostics-panel";
 import { ReservationPanel } from "./reservation-panel";
 import { ScreeningPanel } from "./screening-panel";
 import { SeatMap } from "./seat-map";
@@ -20,12 +21,7 @@ import { SeatMap } from "./seat-map";
  */
 export function MovieReservationDemo() {
   const [workflow, setWorkflow] = useState(() => createDemoTraceContext());
-  const {
-    latestExchange,
-    exchanges,
-    recordExchange,
-    resetExchangeLog,
-  } = useGraphqlExchangeLog();
+  const { recordExchange, resetExchangeLog } = useGraphqlExchangeLog();
   const api = useMemo(
     () =>
       createMovieReservationApi({
@@ -88,6 +84,19 @@ export function MovieReservationDemo() {
     resetExchangeLog();
   }, [resetExchangeLog, resetReservation]);
 
+  const handleAgentCompleted = useCallback(
+    (result: AgentReservationCallResult) => {
+      if (
+        result.ok &&
+        result.response.reservationStatus?.toLowerCase() === "confirmed"
+      ) {
+        resetReservation();
+      }
+      void reloadCatalog();
+    },
+    [reloadCatalog, resetReservation],
+  );
+
   return (
     <main className="app-shell">
       <header className="top-bar">
@@ -147,12 +156,10 @@ export function MovieReservationDemo() {
             onSubmit={submitReservation}
             onReset={resetReservation}
           />
-          <DiagnosticsPanel
+          <AgentPanel
             workflow={workflow}
-            latestExchange={latestExchange}
-            exchanges={exchanges}
-            reservationRequest={reservationRequest}
             onNewWorkflow={handleNewWorkflow}
+            onAgentCompleted={handleAgentCompleted}
           />
         </div>
       </div>
