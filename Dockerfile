@@ -16,6 +16,7 @@ RUN npm run build
 FROM ${NGINX_IMAGE} AS prod
 
 COPY container/nginx.conf /etc/nginx/conf.d/default.conf
+COPY container/audit-proxy.conf /etc/nginx/audit-proxy.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8088
