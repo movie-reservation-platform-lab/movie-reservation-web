@@ -16,7 +16,7 @@ describe("repository and CI automation contract", () => {
     expect(packageManifest.scripts["test:automation"]).toBe(
       "vitest run --config automation/vitest.config.ts",
     );
-    expect(frontendConfig).toContain('include: ["src/**/*.test.ts"]');
+    expect(frontendConfig).toContain('include: ["src/**/*.test.{ts,tsx}"]');
     expect(frontendConfig).not.toContain("automation/");
     expect(automationConfig).toContain(
       'include: ["automation/**/*.test.mjs"]',

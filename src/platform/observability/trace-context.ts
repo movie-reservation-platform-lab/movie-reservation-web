@@ -9,6 +9,7 @@ export interface DemoTraceContext {
   readonly traceId: string;
   readonly frontendSpanId: string;
   readonly traceparent: string;
+  readonly tracestate?: string;
   readonly createdAt: string;
 }
 

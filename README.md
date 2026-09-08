@@ -115,6 +115,17 @@ npm run check
    then search for the workflow in Grafana/Tempo/Loki. A future Playwright
    smoke test should capture the same workflow in an automated report.
 
+## Audit Credential Checks
+
+Open `/audit-demo` or use **Audit logging** in the navigation. The separate
+screen checks demo credentials against the TypeScript, Python or Rust service
+and displays the event/request/action/trace IDs. It does not create a session
+or change the reservation app's authorization.
+
+See [the audit demo runbook](docs/audit-demo.md) for backend flags, local proxy
+ports and the correlation walkthrough. Credentials are entered at runtime;
+never put them in a `VITE_*` value or commit them.
+
 ## Temporary ECS Image
 
 The issue #6 image is an explicit demo shortcut for one ECS task with multiple
@@ -124,11 +135,15 @@ task-local network namespace:
 
 - `/graphql` -> `http://127.0.0.1:3000`
 - `/api/v1/demo/*` -> `http://127.0.0.1:8080`
+- `/audit-demo/reservation/login` -> `http://127.0.0.1:3000/demo/auth/login`
+- `/audit-demo/agent/login` -> `http://127.0.0.1:8080/demo/auth/login`
+- `/audit-demo/recommendation/login` -> `http://127.0.0.1:8082/demo/auth/login`
 
 The proxy explicitly preserves `traceparent`, `tracestate`,
-`X-Correlation-Id`, `X-Request-Id`, and `X-Demo-Fault`. Inspect these values in
-the browser network panel; the UI intentionally does not add a diagnostics
-panel.
+`X-Correlation-Id`, `X-Request-Id`, and native `X-Amzn-Trace-Id` / `X-Amz-Cf-Id`
+headers when received. The existing reservation and agent routes also preserve
+`X-Demo-Fault`. Inspect propagation in the browser network panel; the audit
+screen shows validated response IDs, not raw backend diagnostics.
 
 Build and smoke the image locally:
 
