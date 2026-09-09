@@ -8,6 +8,12 @@ interface SeatMapProps {
   readonly screening: Screening | undefined;
   readonly selectedSeatIds: readonly string[];
   readonly onSeatToggle: (seat: Seat) => void;
+  readonly availableSeatIds: ReadonlySet<string>;
+  readonly occupiedSeatIds: ReadonlySet<string>;
+  readonly loading: boolean;
+  readonly error: string | undefined;
+  readonly onRefresh: () => void;
+  readonly busy: boolean;
 }
 
 /**
@@ -17,6 +23,12 @@ export function SeatMap({
   screening,
   selectedSeatIds,
   onSeatToggle,
+  availableSeatIds,
+  occupiedSeatIds,
+  loading,
+  error,
+  onRefresh,
+  busy,
 }: SeatMapProps) {
   const seatRows = useMemo(
     () => groupSeatsByRow(screening?.seats ?? []),
@@ -37,6 +49,19 @@ export function SeatMap({
         <Armchair aria-hidden="true" className="panel-icon" size={22} />
       </div>
 
+      <p>
+        Available · Selected · Reserved. Pending requests do not hold seats.
+      </p>
+      {loading && <p role="status">Loading seat availability…</p>}
+      {error && <p role="alert">{error}</p>}
+      <button
+        type="button"
+        className="secondary-button"
+        onClick={onRefresh}
+        disabled={busy || loading}
+      >
+        Refresh availability
+      </button>
       {screening === undefined ? (
         <div className="empty-state">
           <Armchair aria-hidden="true" size={28} />
@@ -57,16 +82,20 @@ export function SeatMap({
                 </span>
                 <div className="seat-row__seats">
                   {seats.map((seat) => {
-                    const isSelected = selectedSeatIdSet.has(seat.id);
+                    const available = availableSeatIds.has(seat.id);
+                    const occupied = occupiedSeatIds.has(seat.id);
+                    const isSelected =
+                      available && selectedSeatIdSet.has(seat.id);
 
                     return (
                       <button
                         key={seat.id}
-                        className={`seat-button ${isSelected ? "seat-button--selected" : ""}`}
+                        className={`seat-button ${isSelected ? "seat-button--selected" : ""} ${occupied ? "seat-button--reserved" : ""}`}
                         type="button"
+                        disabled={busy || !available}
                         onClick={() => onSeatToggle(seat)}
                         aria-pressed={isSelected}
-                        aria-label={`Seat ${formatSeatLabel(seat)}`}
+                        aria-label={`Seat ${formatSeatLabel(seat)} — ${occupied ? "Reserved" : available ? "Available" : "Unknown availability"}`}
                       >
                         {seat.number}
                       </button>

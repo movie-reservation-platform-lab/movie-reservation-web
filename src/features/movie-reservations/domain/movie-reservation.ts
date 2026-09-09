@@ -39,7 +39,9 @@ export interface Seat {
 }
 
 /**
- * Scheduled movie showing with its currently selectable seats.
+ * Scheduled movie showing with physical seats from the catalog. The availability
+ * adapter supplies a filtered copy to the selection workflow; the map retains
+ * the full list. Catalog membership alone never implies a seat is free.
  *
  * `startsAt` and `endsAt` are ISO timestamp strings from the API. The UI formats
  * them near the rendering boundary instead of converting the domain object into
@@ -58,11 +60,7 @@ export interface Screening {
  * Backend lifecycle states for an asynchronous reservation request.
  */
 export type ReservationRequestStatus =
-  | "REQUESTED"
-  | "PROCESSING"
-  | "CONFIRMED"
-  | "REJECTED"
-  | "FAILED";
+  "REQUESTED" | "PROCESSING" | "CONFIRMED" | "REJECTED" | "FAILED";
 
 /**
  * Reservation request created immediately after the user submits seats.

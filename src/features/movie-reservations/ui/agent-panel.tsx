@@ -22,6 +22,7 @@ interface AgentPanelProps {
   readonly workflow: DemoTraceContext;
   readonly onNewWorkflow: () => void;
   readonly onAgentCompleted: (result: AgentReservationCallResult) => void;
+  readonly bookingBusy: boolean;
 }
 
 const faultOptions: readonly {
@@ -37,8 +38,12 @@ export function AgentPanel({
   workflow,
   onNewWorkflow,
   onAgentCompleted,
+  bookingBusy,
 }: AgentPanelProps) {
-  const agent = useAgentReservation({ workflow, onCompleted: onAgentCompleted });
+  const agent = useAgentReservation({
+    workflow,
+    onCompleted: onAgentCompleted,
+  });
   const canRun = !agent.isRunning && agent.prompt.trim().length > 0;
 
   return (
@@ -51,6 +56,7 @@ export function AgentPanel({
         <button
           className="icon-button"
           type="button"
+          disabled={agent.isRunning || bookingBusy}
           onClick={() => {
             agent.clearAgentState();
             onNewWorkflow();
@@ -135,7 +141,10 @@ export function AgentPanel({
       </form>
 
       {agent.isRunning ? (
-        <div className="agent-run-card agent-run-card--active" aria-live="polite">
+        <div
+          className="agent-run-card agent-run-card--active"
+          aria-live="polite"
+        >
           <Loader2 aria-hidden="true" size={18} className="spin" />
           <strong>Calling platform tools</strong>
         </div>
@@ -153,7 +162,11 @@ export function AgentPanel({
   );
 }
 
-function AgentResultCard({ result }: { readonly result: AgentReservationCallResult }) {
+function AgentResultCard({
+  result,
+}: {
+  readonly result: AgentReservationCallResult;
+}) {
   if (!result.ok) {
     return (
       <div className="agent-result agent-result--error" role="status">
@@ -175,8 +188,14 @@ function AgentResultCard({ result }: { readonly result: AgentReservationCallResu
       </div>
       <p>{result.response.finalAnswer}</p>
       <div className="agent-summary-grid">
-        <SummaryValue label="Movie" value={readDisplayValue(result.response.movie, "title")} />
-        <SummaryValue label="Seat" value={formatAgentSeat(result.response.seat)} />
+        <SummaryValue
+          label="Movie"
+          value={readDisplayValue(result.response.movie, "title")}
+        />
+        <SummaryValue
+          label="Seat"
+          value={formatAgentSeat(result.response.seat)}
+        />
         <SummaryValue
           label="Request"
           value={
@@ -185,7 +204,10 @@ function AgentResultCard({ result }: { readonly result: AgentReservationCallResu
               : formatShortId(result.response.reservationRequestId)
           }
         />
-        <SummaryValue label="Status" value={result.response.reservationStatus ?? "No status"} />
+        <SummaryValue
+          label="Status"
+          value={result.response.reservationStatus ?? "No status"}
+        />
       </div>
       <div className="tool-result-list" aria-label="Agent tool results">
         {result.response.toolResults.map((toolResult, index) => (
@@ -199,8 +221,14 @@ function AgentResultCard({ result }: { readonly result: AgentReservationCallResu
   );
 }
 
-function AgentRunMeta({ result }: { readonly result: AgentReservationCallResult }) {
-  const workflowId = result.ok ? result.response.workflowId : result.error.workflowId;
+function AgentRunMeta({
+  result,
+}: {
+  readonly result: AgentReservationCallResult;
+}) {
+  const workflowId = result.ok
+    ? result.response.workflowId
+    : result.error.workflowId;
   return (
     <div className="agent-run-meta">
       <span>HTTP {result.statusCode}</span>
@@ -210,7 +238,13 @@ function AgentRunMeta({ result }: { readonly result: AgentReservationCallResult 
   );
 }
 
-function SummaryValue({ label, value }: { readonly label: string; readonly value: string }) {
+function SummaryValue({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}) {
   return (
     <div>
       <span>{label}</span>
@@ -219,7 +253,10 @@ function SummaryValue({ label, value }: { readonly label: string; readonly value
   );
 }
 
-function readDisplayValue(record: Record<string, unknown> | null, fieldName: string): string {
+function readDisplayValue(
+  record: Record<string, unknown> | null,
+  fieldName: string,
+): string {
   const value = record?.[fieldName];
   return typeof value === "string" && value.length > 0 ? value : "Not returned";
 }
@@ -227,7 +264,10 @@ function readDisplayValue(record: Record<string, unknown> | null, fieldName: str
 function formatAgentSeat(record: Record<string, unknown> | null): string {
   const row = record?.row;
   const number = record?.number;
-  if (typeof row === "string" && (typeof number === "number" || typeof number === "string")) {
+  if (
+    typeof row === "string" &&
+    (typeof number === "number" || typeof number === "string")
+  ) {
     return `${row}${number}`;
   }
   return "Not returned";

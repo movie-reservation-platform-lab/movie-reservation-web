@@ -7,6 +7,7 @@ import { createMovieReservationApi } from "../adapters/graphql/movie-reservation
 import { useGraphqlExchangeLog } from "../adapters/react/use-graphql-exchange-log";
 import { useMovieCatalog } from "../adapters/react/use-movie-catalog";
 import { useReservationWorkflow } from "../adapters/react/use-reservation-workflow";
+import { useScreeningAvailability } from "../adapters/react/use-screening-availability";
 import { AgentPanel } from "./agent-panel";
 import { CatalogPanel } from "./catalog-panel";
 import { ReservationPanel } from "./reservation-panel";
@@ -43,6 +44,7 @@ export function MovieReservationDemo() {
     selectMovie,
     selectScreening,
   } = useMovieCatalog({ api });
+  const availability = useScreeningAvailability(api, selectedScreening);
   const {
     selectedSeatIds,
     selectedSeats,
@@ -55,7 +57,11 @@ export function MovieReservationDemo() {
     submitReservation,
     resetReservation,
     clearReservationError,
-  } = useReservationWorkflow({ api, selectedScreening });
+  } = useReservationWorkflow({
+    api,
+    selectedScreening: availability.selectableScreening,
+    onSettled: availability.refresh,
+  });
 
   const handleMovieSelect = useCallback(
     (movieId: string) => {
@@ -88,13 +94,23 @@ export function MovieReservationDemo() {
     (result: AgentReservationCallResult) => {
       if (
         result.ok &&
-        result.response.reservationStatus?.toLowerCase() === "confirmed"
+        result.response.reservationStatus?.toLowerCase() === "confirmed" &&
+        !isSubmitting &&
+        !isPolling
       ) {
         resetReservation();
       }
+      // Occupancy must refresh even if the independent catalog request fails.
+      void availability.refresh();
       void reloadCatalog();
     },
-    [reloadCatalog, resetReservation],
+    [
+      availability.refresh,
+      reloadCatalog,
+      resetReservation,
+      isSubmitting,
+      isPolling,
+    ],
   );
 
   return (
@@ -140,6 +156,14 @@ export function MovieReservationDemo() {
             screening={selectedScreening}
             selectedSeatIds={selectedSeatIds}
             onSeatToggle={toggleSeat}
+            availableSeatIds={availability.availableSeatIds}
+            occupiedSeatIds={availability.occupiedSeatIds}
+            loading={availability.loading}
+            error={availability.error}
+            onRefresh={() => {
+              void availability.refresh();
+            }}
+            busy={isSubmitting || isPolling}
           />
         </div>
 
@@ -158,6 +182,7 @@ export function MovieReservationDemo() {
           />
           <AgentPanel
             workflow={workflow}
+            bookingBusy={isSubmitting || isPolling}
             onNewWorkflow={handleNewWorkflow}
             onAgentCompleted={handleAgentCompleted}
           />

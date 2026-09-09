@@ -29,6 +29,7 @@ const reservationPollingPolicy: ReservationPollingPolicy = {
 interface UseReservationWorkflowInput {
   readonly api: MovieReservationApi;
   readonly selectedScreening: Screening | undefined;
+  readonly onSettled?: () => Promise<void>;
 }
 
 export interface ReservationWorkflow {
@@ -54,6 +55,7 @@ export interface ReservationWorkflow {
 export function useReservationWorkflow({
   api,
   selectedScreening,
+  onSettled,
 }: UseReservationWorkflowInput): ReservationWorkflow {
   const [selectedSeatIds, setSelectedSeatIds] = useState<readonly string[]>([]);
   const [reservationRequest, setReservationRequest] =
@@ -63,6 +65,19 @@ export function useReservationWorkflow({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
   const pollRunIdRef = useRef(0);
+  const submittingRef = useRef(false);
+  // Catalog reloads can replace the availability controller during polling.
+  // Terminal results must refresh the current snapshot, not a captured screen.
+  const onSettledRef = useRef(onSettled);
+  useEffect(() => {
+    onSettledRef.current = onSettled;
+  }, [onSettled]);
+  useEffect(
+    () => () => {
+      pollRunIdRef.current += 1;
+    },
+    [],
+  );
   const selectedScreeningId = selectedScreening?.id;
 
   const selectedSeats = useMemo(
@@ -76,6 +91,7 @@ export function useReservationWorkflow({
 
   const resetReservation = useCallback(() => {
     pollRunIdRef.current += 1;
+    submittingRef.current = false;
     setSelectedSeatIds([]);
     setReservationRequest(undefined);
     setReservationResult(undefined);
@@ -99,24 +115,34 @@ export function useReservationWorkflow({
     resetReservation();
   }, [resetReservation, selectedScreeningId]);
 
-  const toggleSeat = useCallback((seat: Seat) => {
-    setSelectedSeatIds((currentSeatIds) =>
-      toggleSeatId(currentSeatIds, seat.id),
-    );
-    setReservationRequest(undefined);
-    setReservationResult(undefined);
-    setError(undefined);
-  }, []);
+  const toggleSeat = useCallback(
+    (seat: Seat) => {
+      if (
+        submittingRef.current ||
+        !selectedScreening?.seats.some((candidate) => candidate.id === seat.id)
+      )
+        return;
+      setSelectedSeatIds((currentSeatIds) =>
+        toggleSeatId(currentSeatIds, seat.id),
+      );
+      setReservationRequest(undefined);
+      setReservationResult(undefined);
+      setError(undefined);
+    },
+    [selectedScreening],
+  );
 
   const submitReservation = useCallback(async () => {
     if (
       selectedScreening === undefined ||
+      submittingRef.current ||
       selectedSeatIdsForActiveScreening.length === 0
     ) {
       return;
     }
 
     const runId = pollRunIdRef.current + 1;
+    submittingRef.current = true;
     pollRunIdRef.current = runId;
     setIsSubmitting(true);
     setError(undefined);
@@ -155,7 +181,9 @@ export function useReservationWorkflow({
       }
     } finally {
       if (pollRunIdRef.current === runId) {
+        submittingRef.current = false;
         setIsSubmitting(false);
+        await onSettledRef.current?.();
       }
     }
   }, [api, selectedScreening, selectedSeatIdsForActiveScreening]);
