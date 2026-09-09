@@ -3,6 +3,8 @@ import {
   type GraphqlExchange,
 } from "../../../../platform/api/graphql-client";
 import type { DemoTraceContext } from "../../../../platform/observability/trace-context";
+import type { ScreeningAvailabilityApi } from "../../application/screening-availability-api";
+import { parseAvailabilityData } from "./parsers/availability-parser";
 import type {
   MovieReservationApi,
   RequestReservationCommand,
@@ -87,8 +89,20 @@ interface ApiCallInput {
  * This adapter owns GraphQL operation names, operation strings, variables, and
  * response parsing. Callers only see the `MovieReservationApi` interface.
  */
-export function createMovieReservationApi(input: ApiCallInput): MovieReservationApi {
+export function createMovieReservationApi(
+  input: ApiCallInput,
+): MovieReservationApi & ScreeningAvailabilityApi {
   return {
+    fetchAvailability: (screeningId) =>
+      requestGraphql({
+        operationName: "ReservationUiAvailability",
+        query:
+          "query ReservationUiAvailability($screeningId: ID!) { screeningAvailability(screeningId: $screeningId) { screeningId seats { seatId available } } }",
+        variables: { screeningId },
+        workflow: input.workflow,
+        parseData: parseAvailabilityData,
+        onExchange: input.onExchange,
+      }),
     fetchCatalog: () =>
       requestGraphql({
         operationName: "ReservationUiCatalog",

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { MovieReservationApi } from "../../application/movie-reservation-api";
 import {
@@ -49,7 +49,10 @@ export interface MovieCatalogWorkflow {
  * The hook keeps the previous catalog visible while a reload is in progress and
  * normalizes selection against the latest response when the reload completes.
  */
-export function useMovieCatalog({ api }: UseMovieCatalogInput): MovieCatalogWorkflow {
+export function useMovieCatalog({
+  api,
+}: UseMovieCatalogInput): MovieCatalogWorkflow {
+  const generation = useRef(0);
   const [catalogState, setCatalogState] = useState<CatalogState>({
     status: "loading",
     catalog: undefined,
@@ -74,6 +77,7 @@ export function useMovieCatalog({ api }: UseMovieCatalogInput): MovieCatalogWork
   );
 
   const reloadCatalog = useCallback(async () => {
+    const run = ++generation.current;
     setCatalogState((currentState) => ({
       status: "loading",
       catalog: currentState.catalog,
@@ -81,12 +85,14 @@ export function useMovieCatalog({ api }: UseMovieCatalogInput): MovieCatalogWork
 
     try {
       const loadedCatalog = await api.fetchCatalog();
+      if (generation.current !== run) return;
 
       setCatalogState({ status: "success", catalog: loadedCatalog });
       setSelection((currentSelection) =>
         selectInitialCatalogItems(loadedCatalog, currentSelection),
       );
     } catch (error) {
+      if (generation.current !== run) return;
       reportFrontendError("Catalog request failed", error);
       setCatalogState((currentState) => ({
         status: "error",
@@ -98,6 +104,9 @@ export function useMovieCatalog({ api }: UseMovieCatalogInput): MovieCatalogWork
 
   useEffect(() => {
     void reloadCatalog();
+    return () => {
+      ++generation.current;
+    };
   }, [reloadCatalog]);
 
   const selectMovie = useCallback(
@@ -109,15 +118,18 @@ export function useMovieCatalog({ api }: UseMovieCatalogInput): MovieCatalogWork
     [catalog],
   );
 
-  const selectScreening = useCallback((screeningId: string) => {
-    setSelection((currentSelection) =>
-      selectScreeningInCatalog(
-        currentSelection,
-        movieScreenings,
-        screeningId,
-      ),
-    );
-  }, [movieScreenings]);
+  const selectScreening = useCallback(
+    (screeningId: string) => {
+      setSelection((currentSelection) =>
+        selectScreeningInCatalog(
+          currentSelection,
+          movieScreenings,
+          screeningId,
+        ),
+      );
+    },
+    [movieScreenings],
+  );
 
   return {
     catalog,

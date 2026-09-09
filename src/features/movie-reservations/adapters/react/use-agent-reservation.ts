@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   requestAgentReservation,
@@ -20,14 +20,16 @@ export const agentPromptPresets: readonly AgentPromptPreset[] = [
   {
     id: "happy",
     label: "Happy path",
-    prompt: "Find me an exciting movie and reserve a good available aisle seat.",
+    prompt:
+      "Find me an exciting movie and reserve a good available aisle seat.",
     seatPreference: "aisle",
     fault: "none",
   },
   {
     id: "slow",
     label: "Slow dependency",
-    prompt: "Recommend an exciting movie and trigger the slow recommendation path.",
+    prompt:
+      "Recommend an exciting movie and trigger the slow recommendation path.",
     seatPreference: "aisle",
     fault: "slow-recommendation",
   },
@@ -73,7 +75,23 @@ export function useAgentReservation({
   );
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string>();
-  const [latestResult, setLatestResult] = useState<AgentReservationCallResult>();
+  const [latestResult, setLatestResult] =
+    useState<AgentReservationCallResult>();
+  const onCompletedRef = useRef(onCompleted);
+  const generation = useRef(0);
+  const running = useRef(false);
+  useEffect(() => {
+    onCompletedRef.current = onCompleted;
+  }, [onCompleted]);
+  useEffect(() => {
+    setIsRunning(false);
+    setLatestResult(undefined);
+    setError(undefined);
+    return () => {
+      ++generation.current;
+      running.current = false;
+    };
+  }, [workflow]);
 
   const applyPreset = useCallback((preset: AgentPromptPreset) => {
     setPrompt(preset.prompt);
@@ -88,13 +106,18 @@ export function useAgentReservation({
   }, []);
 
   const runAgent = useCallback(async () => {
+    if (running.current) return;
     const trimmedPrompt = prompt.trim();
     const trimmedSeatPreference = seatPreference.trim();
     if (trimmedPrompt.length === 0 || trimmedSeatPreference.length === 0) {
-      setError("Enter a movie prompt and seat preference before running the agent.");
+      setError(
+        "Enter a movie prompt and seat preference before running the agent.",
+      );
       return;
     }
 
+    const run = ++generation.current;
+    running.current = true;
     setIsRunning(true);
     setError(undefined);
     try {
@@ -106,9 +129,11 @@ export function useAgentReservation({
           fault,
         },
       });
+      if (generation.current !== run) return;
       setLatestResult(result);
-      onCompleted?.(result);
+      onCompletedRef.current?.(result);
     } catch (agentError) {
+      if (generation.current !== run) return;
       reportFrontendError("Agent request failed", agentError);
       setError(
         agentError instanceof Error
@@ -116,9 +141,12 @@ export function useAgentReservation({
           : "Agent request failed before a structured response was returned.",
       );
     } finally {
-      setIsRunning(false);
+      if (generation.current === run) {
+        running.current = false;
+        setIsRunning(false);
+      }
     }
-  }, [fault, onCompleted, prompt, seatPreference, workflow]);
+  }, [fault, prompt, seatPreference, workflow]);
 
   return {
     prompt,

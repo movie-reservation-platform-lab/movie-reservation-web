@@ -42,6 +42,13 @@ export function ReservationPanel({
   onSubmit,
   onReset,
 }: ReservationPanelProps) {
+  // Keep submitted seat labels visible when refreshed occupancy removes them
+  // from the selectable set. Selection and the accepted request are distinct.
+  const summarySeats = reservationRequest
+    ? (screening?.seats.filter((seat) =>
+        reservationRequest.seatIds.includes(seat.id),
+      ) ?? [])
+    : selectedSeats;
   const canSubmit =
     screening !== undefined &&
     selectedSeats.length > 0 &&
@@ -77,9 +84,9 @@ export function ReservationPanel({
         <div>
           <dt>Seats</dt>
           <dd>
-            {selectedSeats.length === 0
+            {summarySeats.length === 0
               ? "No seats selected"
-              : selectedSeats.map(formatSeatLabel).join(", ")}
+              : summarySeats.map(formatSeatLabel).join(", ")}
           </dd>
         </div>
       </dl>
@@ -104,7 +111,12 @@ export function ReservationPanel({
           )}
           Reserve
         </button>
-        <button className="secondary-button" type="button" onClick={onReset}>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={onReset}
+          disabled={isSubmitting || isPolling}
+        >
           <RotateCcw aria-hidden="true" size={18} />
           Reset
         </button>

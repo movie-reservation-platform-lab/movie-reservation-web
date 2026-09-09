@@ -546,7 +546,7 @@ a:focus-visible {
     transform 140ms ease;
 }
 
-.seat-button:hover {
+.seat-button:hover:not(:disabled) {
   color: var(--text);
   border-color: var(--green);
   transform: translateY(-1px);
@@ -556,6 +556,31 @@ a:focus-visible {
   color: #17130d;
   background: var(--accent);
   border-color: #ffd998;
+}
+
+.seat-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.seat-button--reserved {
+  color: var(--danger);
+  background: #39221f;
+  border-color: var(--red);
+  text-decoration: line-through;
+}
+
+.login-shell {
+  max-width: 640px;
+}
+
+.login-shell .panel {
+  padding: 24px;
+}
+
+.login-shell p {
+  color: var(--muted);
+  line-height: 1.6;
 }
 
 .summary-list {

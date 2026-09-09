@@ -104,7 +104,8 @@ npm run check
 
 ## Demo Flow
 
-1. Load catalog data.
+1. Sign in at `/login` with the reservation service's synthetic demo credentials;
+   a successful check redirects to booking at `/` and loads catalog data.
 2. Select a movie.
 3. Pick a screening.
 4. Select one or more seats.
@@ -114,6 +115,11 @@ npm run check
 8. Use the browser network panel to inspect the emitted propagation headers,
    then search for the workflow in Grafana/Tempo/Loki. A future Playwright
    smoke test should capture the same workflow in an automated report.
+
+See [booking access and availability](docs/booking-access-and-availability.md)
+for local setup, the replaceable authentication boundary, regression checks,
+and the backend-first rollout order. The login is deliberately a demo UI gate,
+not real API authentication. Never enter a real password.
 
 ## Audit Credential Checks
 
@@ -153,9 +159,10 @@ docker run --rm -p 8088:8088 movie-reservation-web:local
 curl http://127.0.0.1:8088/health
 ```
 
-The current backend API returns auditorium seats, not a dedicated availability
-calculation. Already-reserved seeded seats are still clickable and should become
-useful rejection demos.
+The seat map combines physical auditorium seats with the API's
+`screeningAvailability` snapshot. Reserved seats are disabled, including after
+page reload. Pending requests are not holds; concurrent bookings can still be
+rejected by the backend. Missing or failed availability disables selection.
 
 ## Deployment Contract
 
