@@ -92,6 +92,6 @@ function readWorkflowJob(jobName) {
   expect(workflow).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}");
   expect(publish.indexOf("/actions/prepare-container-candidate@")).toBeLessThan(publish.indexOf("docker/login-action@"));
   expect(publish.indexOf("docker/build-push-action@")).toBeLessThan(publish.indexOf("/actions/container-evidence@"));
-  const pins = [...publish.matchAll(/movie-reservation-platform-lab\/\.github\/actions\/[^@]+@([a-f0-9]{40})/g)].map(m => m[1]);
+  const pins = [...publish.matchAll(/movie-reservation-platform-lab\/movie-platform-actions\/actions\/[^@]+@([a-f0-9]{40})/g)].map(m => m[1]);
   expect(pins).toHaveLength(2); expect(pins[0]).toBe(pins[1]);
  });
