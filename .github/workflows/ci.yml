@@ -262,7 +262,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: movie-reservation-platform-lab/movie-platform-actions
-          ref: bb40579c285df0b581c48b10f9b34574d5c78639
+          ref: 036531133bcefd454b5afc0eb55f8ba0328901ea
           path: .platform-actions
           persist-credentials: false
 
@@ -323,9 +323,10 @@ jobs:
 
       - name: Prepare canonical candidate
         id: candidate
-        uses: movie-reservation-platform-lab/movie-platform-actions/actions/prepare-container-candidate@bb40579c285df0b581c48b10f9b34574d5c78639 # shared evidence v1alpha3
+        uses: movie-reservation-platform-lab/movie-platform-actions/actions/prepare-container-candidate@036531133bcefd454b5afc0eb55f8ba0328901ea # shared evidence v1alpha3
         with:
           component: reservation-web
+          github-token: ${{ github.token }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
@@ -351,7 +352,7 @@ jobs:
             org.opencontainers.image.version=${{ steps.candidate.outputs.tag }}
 
       - name: Attest and publish security evidence
-        uses: movie-reservation-platform-lab/movie-platform-actions/actions/container-evidence@bb40579c285df0b581c48b10f9b34574d5c78639 # shared evidence v1alpha3
+        uses: movie-reservation-platform-lab/movie-platform-actions/actions/container-evidence@036531133bcefd454b5afc0eb55f8ba0328901ea # shared evidence v1alpha3
         with:
           evidence-version: v1alpha3
           component: reservation-web

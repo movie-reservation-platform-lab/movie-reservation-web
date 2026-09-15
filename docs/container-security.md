@@ -21,9 +21,13 @@ container-security-check success. Its existing profile-bound job ID/display
 name and push/main/canonical-repository guard remain intact.
 
 Both shared actions and the scanner checkout pin
-`bb40579c285df0b581c48b10f9b34574d5c78639`. The implementation pin does not freeze
-approved policy: the helper resolves central main once per decision and records
-that source revision. Failed or incomplete policy acquisition fails closed.
+`036531133bcefd454b5afc0eb55f8ba0328901ea`. Prepare receives the publishing
+job's token explicitly for its authenticated exact-main lookup; its job retains
+the existing `contents: read`, package, OIDC and attestation permissions. The
+implementation pin does not freeze approved policy: the helper resolves central
+main once per decision and records that source revision. Failed or incomplete
+policy acquisition fails closed. This shared release also bounds legacy evidence
+reads, sanitizes failure output and reports scanner cleanup failures.
 
 ## Retention and failure behavior
 
@@ -63,7 +67,7 @@ policy. Use an existing reviewed actions checkout or create one outside this rep
 
 ```sh
 git clone https://github.com/movie-reservation-platform-lab/movie-platform-actions.git /tmp/reservation-web-actions
-git -C /tmp/reservation-web-actions checkout --detach bb40579c285df0b581c48b10f9b34574d5c78639
+git -C /tmp/reservation-web-actions checkout --detach 036531133bcefd454b5afc0eb55f8ba0328901ea
 npm ci --ignore-scripts
 npm run check
 docker build --pull --platform linux/amd64 --provenance=false --target prod --tag movie-reservation-web:v1alpha3 .
@@ -119,7 +123,13 @@ successful canonical main run; no publication/admission workflow was dispatched.
 
 ## Cross-repository dependencies
 
-- [movie-platform-actions #13](https://github.com/movie-reservation-platform-lab/movie-platform-actions/pull/13), merged at the exact pin above: reviewed interfaces, isolated scanner, current-policy evaluation, rejected-diagnostic retention and signed v3 format.
+- [movie-platform-actions #14](https://github.com/movie-reservation-platform-lab/movie-platform-actions/issues/14)
+  and [#18](https://github.com/movie-reservation-platform-lab/movie-platform-actions/pull/18):
+  authenticated prepare plus bounded evidence failure paths and scanner cleanup,
+  merged at the current exact pin above.
+- [recommendation-MCP #13](https://github.com/movie-reservation-platform-lab/movie-recommendation-mcp/pull/13):
+  publication-and-admission canary for this caller migration; it does not prove
+  application deployment or universal private-repository compatibility.
 - [recommendation-MCP #11](https://github.com/movie-reservation-platform-lab/movie-recommendation-mcp/pull/11) and [reservation-MCP #9](https://github.com/movie-reservation-platform-lab/movie-reservation-mcp/pull/9): merged reference implementations. This producer runs its security job on main too so canonical publication can depend on it.
 - [environments #82](https://github.com/movie-reservation-platform-lab/movie-platform-environments/issues/82): tracks runnable-component admission. [#93](https://github.com/movie-reservation-platform-lab/movie-platform-environments/pull/93) and [#95](https://github.com/movie-reservation-platform-lab/movie-platform-environments/pull/95) are merged policy-reader and diagnostic support. Hosted v3 admission activation/selection remains environment-owned and must be verified there; this PR dispatches no workflows and changes no environment state.
 
@@ -127,3 +137,10 @@ Planning used the local Programming KB note `concepts/Environment Release
 Manifest.md`: immutable candidate creation and environment selection are separate
 responsibilities. The frontend architecture review keeps this work in CI/container
 adapters, with no changes to feature domain/application/UI code.
+
+The authenticated-prepare migration is verified offline and by ordinary PR CI.
+Because ECS publication remains restricted to canonical `main` pushes, PR checks
+cannot exercise prepare or publish evidence. After merge, acceptance must select
+a new successful canonical run and separately admit that exact run; historical
+producer run IDs must not be reused. Rollback reverts the three coordinated pins
+and prepare token input together, with matching current tests and documentation.

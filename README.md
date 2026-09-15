@@ -234,8 +234,21 @@ verification independently checks the successful canonical run and signed
 package before admitting its exact digest to ECR. This producer has no AWS
 credentials or deployment authority. Older runs without this package are not
 eligible for the new admission path; use a fresh successful main run.
-See [the shared action contract](https://github.com/movie-reservation-platform-lab/movie-platform-actions/blob/bb40579c285df0b581c48b10f9b34574d5c78639/docs/container-candidate-actions.md)
+See [the shared action contract](https://github.com/movie-reservation-platform-lab/movie-platform-actions/blob/036531133bcefd454b5afc0eb55f8ba0328901ea/docs/container-candidate-actions.md)
 and [local verification, results and rollout dependencies](docs/container-security.md).
+
+The ECS evidence path adopts
+[actions #18](https://github.com/movie-reservation-platform-lab/movie-platform-actions/pull/18)
+at `036531133bcefd454b5afc0eb55f8ba0328901ea` for both publisher actions and
+the PR/local scanner. Prepare receives `github-token: ${{ github.token }}` for
+its authenticated canonical-main lookup through the publishing job's existing
+`contents: read` authority; the job retains its other required permissions.
+This release also bounds and sanitizes evidence failure paths and reports
+scanner cleanup failures. Evidence remains v1alpha3 and the separate static-site
+publisher is unchanged. PR CI does not run prepare or prove canonical
+publication/private-repository access. Rollback reverts all three tooling pins
+and removes the prepare token input together. See the
+[adoption plan](docs/plans/authenticated-prepare-adoption.md).
 
 ### AI guidance
 
