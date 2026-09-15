@@ -1,3 +1,5 @@
+import { ReservationPollingTimeoutError } from "../../application/request-reservation-workflow";
+
 /**
  * Stable, user-safe message for catalog load failures.
  */
@@ -10,10 +12,7 @@ export function catalogLoadErrorMessage(): string {
  * backend or parser details in the page.
  */
 export function reservationWorkflowErrorMessage(error: unknown): string {
-  if (
-    error instanceof Error &&
-    error.message.includes("Polling stopped before the request reached")
-  ) {
+  if (error instanceof ReservationPollingTimeoutError) {
     return "The reservation request did not finish in time. Try again or inspect the backend logs.";
   }
 

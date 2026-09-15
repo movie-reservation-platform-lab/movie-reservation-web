@@ -6,7 +6,7 @@ import {
   findScreeningsForMovie,
   findSelectedMovie,
   findSelectedScreening,
-  selectInitialCatalogItems,
+  reconcileCatalogSelection,
   selectMovieInCatalog,
   selectScreeningInCatalog,
 } from "../../domain/catalog-selection";
@@ -52,7 +52,8 @@ export interface MovieCatalogWorkflow {
 export function useMovieCatalog({
   api,
 }: UseMovieCatalogInput): MovieCatalogWorkflow {
-  const generation = useRef(0);
+  // A new reload or API instance invalidates all earlier response callbacks.
+  const activeRunIdRef = useRef(0);
   const [catalogState, setCatalogState] = useState<CatalogState>({
     status: "loading",
     catalog: undefined,
@@ -77,7 +78,7 @@ export function useMovieCatalog({
   );
 
   const reloadCatalog = useCallback(async () => {
-    const run = ++generation.current;
+    const runId = ++activeRunIdRef.current;
     setCatalogState((currentState) => ({
       status: "loading",
       catalog: currentState.catalog,
@@ -85,14 +86,18 @@ export function useMovieCatalog({
 
     try {
       const loadedCatalog = await api.fetchCatalog();
-      if (generation.current !== run) return;
+      if (activeRunIdRef.current !== runId) {
+        return;
+      }
 
       setCatalogState({ status: "success", catalog: loadedCatalog });
       setSelection((currentSelection) =>
-        selectInitialCatalogItems(loadedCatalog, currentSelection),
+        reconcileCatalogSelection(loadedCatalog, currentSelection),
       );
     } catch (error) {
-      if (generation.current !== run) return;
+      if (activeRunIdRef.current !== runId) {
+        return;
+      }
       reportFrontendError("Catalog request failed", error);
       setCatalogState((currentState) => ({
         status: "error",
@@ -105,7 +110,7 @@ export function useMovieCatalog({
   useEffect(() => {
     void reloadCatalog();
     return () => {
-      ++generation.current;
+      ++activeRunIdRef.current;
     };
   }, [reloadCatalog]);
 

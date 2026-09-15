@@ -62,6 +62,7 @@ export interface AgentReservationPanelState {
   readonly clearAgentState: () => void;
 }
 
+/** Runs one agent call at a time and ignores results after a trace reset/unmount. */
 export function useAgentReservation({
   workflow,
   onCompleted,
@@ -78,8 +79,10 @@ export function useAgentReservation({
   const [latestResult, setLatestResult] =
     useState<AgentReservationCallResult>();
   const onCompletedRef = useRef(onCompleted);
-  const generation = useRef(0);
-  const running = useRef(false);
+  // Run IDs invalidate callbacks; the ref lock prevents two calls before React
+  // has rendered the isRunning state. Neither ref represents a backend ID.
+  const activeRunIdRef = useRef(0);
+  const isRequestRunningRef = useRef(false);
   useEffect(() => {
     onCompletedRef.current = onCompleted;
   }, [onCompleted]);
@@ -88,8 +91,8 @@ export function useAgentReservation({
     setLatestResult(undefined);
     setError(undefined);
     return () => {
-      ++generation.current;
-      running.current = false;
+      ++activeRunIdRef.current;
+      isRequestRunningRef.current = false;
     };
   }, [workflow]);
 
@@ -106,7 +109,9 @@ export function useAgentReservation({
   }, []);
 
   const runAgent = useCallback(async () => {
-    if (running.current) return;
+    if (isRequestRunningRef.current) {
+      return;
+    }
     const trimmedPrompt = prompt.trim();
     const trimmedSeatPreference = seatPreference.trim();
     if (trimmedPrompt.length === 0 || trimmedSeatPreference.length === 0) {
@@ -116,8 +121,8 @@ export function useAgentReservation({
       return;
     }
 
-    const run = ++generation.current;
-    running.current = true;
+    const runId = ++activeRunIdRef.current;
+    isRequestRunningRef.current = true;
     setIsRunning(true);
     setError(undefined);
     try {
@@ -129,11 +134,15 @@ export function useAgentReservation({
           fault,
         },
       });
-      if (generation.current !== run) return;
+      if (activeRunIdRef.current !== runId) {
+        return;
+      }
       setLatestResult(result);
       onCompletedRef.current?.(result);
     } catch (agentError) {
-      if (generation.current !== run) return;
+      if (activeRunIdRef.current !== runId) {
+        return;
+      }
       reportFrontendError("Agent request failed", agentError);
       setError(
         agentError instanceof Error
@@ -141,8 +150,8 @@ export function useAgentReservation({
           : "Agent request failed before a structured response was returned.",
       );
     } finally {
-      if (generation.current === run) {
-        running.current = false;
+      if (activeRunIdRef.current === runId) {
+        isRequestRunningRef.current = false;
         setIsRunning(false);
       }
     }

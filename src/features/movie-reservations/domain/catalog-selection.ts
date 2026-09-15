@@ -12,33 +12,16 @@ export interface CatalogSelection {
 }
 
 /**
- * Result of reconciling a previous selection with a freshly loaded catalog.
+ * Preserves valid selection IDs on load/reload, falling back to the first movie
+ * and one of its screenings when the previous selection no longer exists.
+ *
+ * Seat selection is reset separately by the reservation controller when the
+ * selected screening changes.
  */
-export interface CatalogSelectionNormalization {
-  readonly selection: CatalogSelection;
-  readonly didScreeningChange: boolean;
-}
-
-/**
- * Chooses the effective movie and screening after loading catalog data.
- */
-export function selectInitialCatalogItems(
+export function reconcileCatalogSelection(
   catalog: Catalog,
   currentSelection: CatalogSelection,
 ): CatalogSelection {
-  return normalizeCatalogSelection(catalog, currentSelection).selection;
-}
-
-/**
- * Reconciles stale UI selection ids against the current catalog.
- *
- * This protects the UI from submitting hidden seat ids that belonged to a
- * screening no longer present in the latest backend response.
- */
-export function normalizeCatalogSelection(
-  catalog: Catalog,
-  currentSelection: CatalogSelection,
-): CatalogSelectionNormalization {
   const selectedMovie =
     findSelectedMovie(catalog, currentSelection.movieId) ?? catalog.movies[0];
   const movieId = selectedMovie?.id;
@@ -50,11 +33,8 @@ export function normalizeCatalogSelection(
   const screeningId = selectedScreening?.id ?? movieScreenings[0]?.id;
 
   return {
-    selection: {
-      movieId,
-      screeningId,
-    },
-    didScreeningChange: currentSelection.screeningId !== screeningId,
+    movieId,
+    screeningId,
   };
 }
 

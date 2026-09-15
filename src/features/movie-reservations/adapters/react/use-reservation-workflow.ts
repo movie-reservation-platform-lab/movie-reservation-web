@@ -64,8 +64,9 @@ export function useReservationWorkflow({
   const [error, setError] = useState<string>();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isPolling, setIsPolling] = useState(false);
-  const pollRunIdRef = useRef(0);
-  const submittingRef = useRef(false);
+  const activeRunIdRef = useRef(0);
+  // Synchronous lock: a second click can arrive before isSubmitting renders.
+  const isSubmittingRef = useRef(false);
   // Catalog reloads can replace the availability controller during polling.
   // Terminal results must refresh the current snapshot, not a captured screen.
   const onSettledRef = useRef(onSettled);
@@ -74,7 +75,7 @@ export function useReservationWorkflow({
   }, [onSettled]);
   useEffect(
     () => () => {
-      pollRunIdRef.current += 1;
+      activeRunIdRef.current += 1;
     },
     [],
   );
@@ -90,8 +91,8 @@ export function useReservationWorkflow({
   );
 
   const resetReservation = useCallback(() => {
-    pollRunIdRef.current += 1;
-    submittingRef.current = false;
+    activeRunIdRef.current += 1;
+    isSubmittingRef.current = false;
     setSelectedSeatIds([]);
     setReservationRequest(undefined);
     setReservationResult(undefined);
@@ -118,10 +119,11 @@ export function useReservationWorkflow({
   const toggleSeat = useCallback(
     (seat: Seat) => {
       if (
-        submittingRef.current ||
+        isSubmittingRef.current ||
         !selectedScreening?.seats.some((candidate) => candidate.id === seat.id)
-      )
+      ) {
         return;
+      }
       setSelectedSeatIds((currentSeatIds) =>
         toggleSeatId(currentSeatIds, seat.id),
       );
@@ -135,15 +137,15 @@ export function useReservationWorkflow({
   const submitReservation = useCallback(async () => {
     if (
       selectedScreening === undefined ||
-      submittingRef.current ||
+      isSubmittingRef.current ||
       selectedSeatIdsForActiveScreening.length === 0
     ) {
       return;
     }
 
-    const runId = pollRunIdRef.current + 1;
-    submittingRef.current = true;
-    pollRunIdRef.current = runId;
+    const runId = activeRunIdRef.current + 1;
+    isSubmittingRef.current = true;
+    activeRunIdRef.current = runId;
     setIsSubmitting(true);
     setError(undefined);
     setReservationRequest(undefined);
@@ -158,7 +160,7 @@ export function useReservationWorkflow({
         dependencies: {
           api,
           wait: delay,
-          isCurrentRun: () => pollRunIdRef.current === runId,
+          isCurrentRun: () => activeRunIdRef.current === runId,
         },
         events: {
           onRequestUpdated: setReservationRequest,
@@ -175,13 +177,13 @@ export function useReservationWorkflow({
         pollingPolicy: reservationPollingPolicy,
       });
     } catch (submitError) {
-      if (pollRunIdRef.current === runId) {
+      if (activeRunIdRef.current === runId) {
         reportFrontendError("Reservation workflow failed", submitError);
         setError(reservationWorkflowErrorMessage(submitError));
       }
     } finally {
-      if (pollRunIdRef.current === runId) {
-        submittingRef.current = false;
+      if (activeRunIdRef.current === runId) {
+        isSubmittingRef.current = false;
         setIsSubmitting(false);
         await onSettledRef.current?.();
       }
