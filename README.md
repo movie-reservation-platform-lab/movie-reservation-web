@@ -86,7 +86,7 @@ receive package write permission.
 
 For the temporary integrated ECS demo, CI also builds and smoke-tests a
 non-root Nginx image. A successful canonical `main` push publishes it as
-`ghcr.io/movie-reservation-platform-lab/movie-reservation-web:ecs-demo-sha-${GITHUB_SHA}`
+`ghcr.io/movie-reservation-platform-lab/movie-reservation-web:ecs-demo-sha-${GITHUB_SHA}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}`
 and reports its immutable digest. Docker BuildKit registry provenance is
 disabled for this temporary image so the first-slice admission tooling receives
 a single `linux/amd64` image manifest. The static OCI artifact remains the
@@ -203,3 +203,19 @@ Keep the golden-path frontend copy as a migration reference until a pushed
 standalone workflow proves candidate publication and the platform-owned AWS
 smoke test proves the deployed reservation path. This repository does not
 claim either gate from a local-only run.
+
+### Container security evidence
+
+The pinned organization-owned actions publish the signed
+`reservation-web-security-evidence-<run-id>-attempt-<attempt>` artifact:
+`component-candidate-evidence-v1alpha2.json`, verified image provenance,
+CycloneDX SBOM, and subject-bound vulnerability report. Evidence is retained
+for 14 days. Missing provenance or CRITICAL findings fail publication of the
+canonical evidence package; HIGH findings remain visible for admission review.
+
+Run/attempt tags are discovery hints, not deployment selectors. Environment
+verification independently checks the successful canonical run and signed
+package before admitting its exact digest to ECR. This producer has no AWS
+credentials or deployment authority. Older runs without this package are not
+eligible for the new admission path; use a fresh successful main run.
+See [the shared action contract](https://github.com/movie-reservation-platform-lab/movie-platform-actions/blob/9b7b5a601367a45356687a0e1bf1d1638d62aca9/docs/container-candidate-actions.md).

@@ -54,7 +54,7 @@ describe("repository and CI automation contract", () => {
     expect(publishJob).toContain("platforms: linux/amd64");
     expect(publishJob).toContain("provenance: false");
     expect(publishJob).toContain("packages: write");
-    expect(publishJob).toContain("ecs-demo-sha-${{ github.sha }}");
+    expect(publishJob).toContain("tags: ${{ steps.candidate.outputs.image_ref }}:${{ steps.candidate.outputs.tag }}");
   });
 
   it("pins every external action to a full commit SHA", () => {
@@ -79,3 +79,19 @@ function readWorkflowJob(jobName) {
 
   return lines.slice(jobStart, nextJob === -1 ? undefined : nextJob).join("\n");
 }
+
+ it("keeps ECS evidence isolated from static publishing with a matching shared pin", () => {
+  const publish = readWorkflowJob("publish-ecs-image");
+  const staticJob = readWorkflowJob("publish-static-artifact");
+  expect(publish).toContain("github.repository == 'movie-reservation-platform-lab/movie-reservation-web'");
+  expect(publish).toContain("component: reservation-web");
+  expect(publish).toContain("digest: ${{ steps.publish.outputs.digest }}");
+  expect(publish).toContain("attestations: write");
+  expect(publish).toContain("id-token: write");
+  expect(staticJob).not.toContain("/actions/container-evidence@");
+  expect(workflow).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}");
+  expect(publish.indexOf("/actions/prepare-container-candidate@")).toBeLessThan(publish.indexOf("docker/login-action@"));
+  expect(publish.indexOf("docker/build-push-action@")).toBeLessThan(publish.indexOf("/actions/container-evidence@"));
+  const pins = [...publish.matchAll(/movie-reservation-platform-lab\/movie-platform-actions\/actions\/[^@]+@([a-f0-9]{40})/g)].map(m => m[1]);
+  expect(pins).toHaveLength(2); expect(pins[0]).toBe(pins[1]);
+ });
