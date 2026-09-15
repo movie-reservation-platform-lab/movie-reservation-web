@@ -84,8 +84,11 @@ tests repository and artifact automation without mixing those checks into the
 frontend behavior test discovery path. Pull requests and manual runs never
 receive package write permission.
 
-For the temporary integrated ECS demo, CI also builds and smoke-tests a
-non-root Nginx image. A successful canonical `main` push publishes it as
+For the temporary integrated ECS demo, CI also builds, smoke-tests and scans a
+non-root Nginx production image for `linux/amd64`. The read-only
+`container-security-check` job runs on PRs, main pushes and manual runs; ECS
+publication depends on it and the existing check, automation and smoke jobs.
+A successful canonical `main` push publishes it as
 `ghcr.io/movie-reservation-platform-lab/movie-reservation-web:ecs-demo-sha-${GITHUB_SHA}-run-${GITHUB_RUN_ID}-attempt-${GITHUB_RUN_ATTEMPT}`
 and reports its immutable digest. Docker BuildKit registry provenance is
 disabled for this temporary image so the first-slice admission tooling receives
@@ -208,14 +211,32 @@ claim either gate from a local-only run.
 
 The pinned organization-owned actions publish the signed
 `reservation-web-security-evidence-<run-id>-attempt-<attempt>` artifact:
-`component-candidate-evidence-v1alpha2.json`, verified image provenance,
+`component-candidate-evidence-v1alpha3.json`, verified image provenance,
 CycloneDX SBOM, and subject-bound vulnerability report. Evidence is retained
-for 14 days. Missing provenance or CRITICAL findings fail publication of the
-canonical evidence package; HIGH findings remain visible for admission review.
+for 14 days. Missing provenance, policy acquisition/evaluation failure, or
+unapproved CRITICAL findings fail publication of the canonical evidence package;
+HIGH findings remain visible for admission review. V3 resolves the current
+approved central policy independently of the pinned action implementation and
+records its revision and decisions. This repository approves no exemptions.
+
+The PR/main/manual security job uses the shared v3 scanner on a local production
+image and retains the complete diagnostics directory for 14 days even when
+scanning or policy evaluation fails. The report includes all severities and
+unfixed findings. These diagnostics cannot replace the publisher's separate
+scan of the exact published digest or its signed four-file evidence package.
+Rejected publication diagnostics also remain separate from canonical evidence.
 
 Run/attempt tags are discovery hints, not deployment selectors. Environment
 verification independently checks the successful canonical run and signed
 package before admitting its exact digest to ECR. This producer has no AWS
 credentials or deployment authority. Older runs without this package are not
 eligible for the new admission path; use a fresh successful main run.
-See [the shared action contract](https://github.com/movie-reservation-platform-lab/movie-platform-actions/blob/9b7b5a601367a45356687a0e1bf1d1638d62aca9/docs/container-candidate-actions.md).
+See [the shared action contract](https://github.com/movie-reservation-platform-lab/movie-platform-actions/blob/bb40579c285df0b581c48b10f9b34574d5c78639/docs/container-candidate-actions.md)
+and [local verification, results and rollout dependencies](docs/container-security.md).
+
+### AI guidance
+
+Canonical assistant guidance lives in `.ai/`, with the root `AGENTS.md` index
+tracked for discovery. Generated `.claude/`, `.codex/`, `.cursor/`, `.gemini/`
+and `.roo/` folders are ignored. Run `bash .ai/sync.sh` after editing canonical
+guidance; see [.ai/README.md](.ai/README.md).

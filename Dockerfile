@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
 ARG NODE_IMAGE=node:24-alpine
-ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.29-alpine
+# Reviewed runtime refresh; update this digest with a production smoke and scan.
+ARG NGINX_IMAGE=nginxinc/nginx-unprivileged:1.30.4-alpine@sha256:adf5042a17f4ecdd200c595fa9ffd1be37efb18f89a830bd1a00e4ab4d59d42c
 
 FROM ${NODE_IMAGE} AS build
 

@@ -6,6 +6,9 @@
 .cursor
 .gemini
 .roo
+.platform-actions
+.local-container-security
+security-evidence
 automation
 coverage
 dist

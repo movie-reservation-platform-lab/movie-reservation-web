@@ -1,0 +1,4 @@
+interface:
+  display_name: "TypeScript"
+  short_description: "Design clear and safe TypeScript boundaries"
+  default_prompt: "Use $typescript to review or improve the TypeScript types and module boundaries in this frontend."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Frontend Clean Architecture"
+  short_description: "Separate React views from workflows"
+  default_prompt: "Use $frontend-clean-architecture to design or review this frontend feature boundary."

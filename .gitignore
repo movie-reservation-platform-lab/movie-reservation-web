@@ -1,6 +1,16 @@
 node_modules/
 dist/
 coverage/
+.platform-actions/
+.local-container-security/
+security-evidence/
+
+# Generated from the canonical .ai/ guidance.
+.claude/
+.codex/
+.cursor/
+.gemini/
+.roo/
 
 env_files/local/
 
