@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const packageManifest = JSON.parse(readFileSync("package.json", "utf8"));
 const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
-const sharedActionsRevision = "bb40579c285df0b581c48b10f9b34574d5c78639";
+const sharedActionsRevision = "036531133bcefd454b5afc0eb55f8ba0328901ea";
 const scannerStepName = "Evaluate complete report with current approved policy";
 const diagnosticUploadStepName = "Retain PR vulnerability diagnostics";
 
@@ -39,7 +39,15 @@ describe("repository and CI automation contract", () => {
     expect(automationJob).not.toContain("run: npm run check:web");
     expect(publishJob).toContain("- automation-quality");
     expect(publishJob).toContain("- check");
-    expect(publishJob).toContain("packages: write");
+    expect(publishJob.match(/^    if: (.+)$/m)?.[1]).toBe(
+      "github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'movie-reservation-platform-lab/movie-reservation-web'",
+    );
+    expect(publishJob.match(/^    permissions:\n((?:      .+\n)+)/m)?.[1]).toBe(
+      "      actions: read\n      contents: read\n      packages: write\n",
+    );
+    expect(publishJob).not.toMatch(
+      /prepare-container-candidate@|\/actions\/container-evidence@|id-token:|attestations:/,
+    );
     expect(workflow).not.toContain("pull_request_target:");
   });
 
@@ -52,8 +60,9 @@ describe("repository and CI automation contract", () => {
     expect(smokeJob).toContain("platforms: linux/amd64");
     expect(smokeJob).toContain("target: prod");
     expect(smokeJob).not.toContain("packages: write");
-    expect(publishJob).toContain("github.event_name == 'push'");
-    expect(publishJob).toContain("github.ref == 'refs/heads/main'");
+    expect(publishJob.match(/^    if: (.+)$/m)?.[1]).toBe(
+      "github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'movie-reservation-platform-lab/movie-reservation-web'",
+    );
     expect(publishJob).toContain("- automation-quality");
     expect(publishJob).toContain("- check");
     expect(publishJob).toContain("- container-smoke");
@@ -62,7 +71,9 @@ describe("repository and CI automation contract", () => {
     expect(publishJob).toContain("platforms: linux/amd64");
     expect(publishJob).toContain("target: prod");
     expect(publishJob).toContain("provenance: false");
-    expect(publishJob).toContain("packages: write");
+    expect(publishJob.match(/^    permissions:\n((?:      .+\n)+)/m)?.[1]).toBe(
+      "      contents: read\n      packages: write\n      id-token: write\n      attestations: write\n",
+    );
     expect(publishJob).toContain(
       "tags: ${{ steps.candidate.outputs.image_ref }}:${{ steps.candidate.outputs.tag }}",
     );
@@ -111,6 +122,14 @@ it("selects reviewed v1alpha3 evidence for the exact published ECS digest", () =
   );
   const actionPins = [...sharedActionReferences].map((match) => match[1]);
   expect(actionPins).toEqual([sharedActionsRevision, sharedActionsRevision]);
+
+  const prepareStep = readWorkflowStep(publishJob, "Prepare canonical candidate");
+  expect(prepareStep).toContain(
+    `uses: movie-reservation-platform-lab/movie-platform-actions/actions/prepare-container-candidate@${sharedActionsRevision}`,
+  );
+  expect(prepareStep).toContain(
+    "        with:\n          component: reservation-web\n          github-token: ${{ github.token }}\n",
+  );
 });
 
 describe("container vulnerability gate", () => {
