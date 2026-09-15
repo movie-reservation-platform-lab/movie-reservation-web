@@ -17,7 +17,7 @@ export interface ReservationPollingPolicy {
 }
 
 /**
- * Dependencies supplied by adapters around the pure workflow.
+ * Side-effect ports supplied by adapters to the framework-independent workflow.
  *
  * `wait` and `isCurrentRun` are injected so tests can run instantly and React
  * can ignore results from a superseded submission.
@@ -39,16 +39,21 @@ export interface RequestReservationWorkflowEvents {
 }
 
 /**
- * Named input object for the reservation workflow use case.
- *
- * TypeScript does not have Python-style named arguments, so object parameters
- * are the idiomatic way to keep multi-dependency function calls readable.
+ * Separates the booking command from lifecycle callbacks and polling controls.
  */
 export interface RequestReservationWorkflowInput {
   readonly command: RequestReservationCommand;
   readonly dependencies: RequestReservationWorkflowDependencies;
   readonly events: RequestReservationWorkflowEvents;
   readonly pollingPolicy: ReservationPollingPolicy;
+}
+
+/** Polling exhausted its attempt budget; the backend request may still finish. */
+export class ReservationPollingTimeoutError extends Error {
+  constructor() {
+    super("Polling stopped before the request reached a terminal state.");
+    this.name = "ReservationPollingTimeoutError";
+  }
 }
 
 /**
@@ -111,9 +116,7 @@ async function pollReservationRequest(
       }
     }
 
-    throw new Error(
-      "Polling stopped before the request reached a terminal state.",
-    );
+    throw new ReservationPollingTimeoutError();
   } finally {
     if (dependencies.isCurrentRun()) {
       events.onPollingStopped();

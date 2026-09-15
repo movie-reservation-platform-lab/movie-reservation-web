@@ -5,7 +5,10 @@ import type {
   ReservationRequest,
 } from "../domain/movie-reservation";
 import type { MovieReservationApi } from "./movie-reservation-api";
-import { requestReservationWorkflow } from "./request-reservation-workflow";
+import {
+  requestReservationWorkflow,
+  ReservationPollingTimeoutError,
+} from "./request-reservation-workflow";
 
 describe("requestReservationWorkflow", () => {
   it("polls until confirmation and loads the reservation result", async () => {
@@ -77,9 +80,7 @@ describe("requestReservationWorkflow", () => {
           delayMs: 25,
         },
       }),
-    ).rejects.toThrow(
-      "Polling stopped before the request reached a terminal state.",
-    );
+    ).rejects.toThrow(ReservationPollingTimeoutError);
 
     expect(events.pollingEvents).toEqual(["started", "stopped"]);
     expect(events.results).toEqual([]);

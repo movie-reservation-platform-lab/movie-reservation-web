@@ -4,8 +4,7 @@ import {
   findScreeningsForMovie,
   findSelectedMovie,
   findSelectedScreening,
-  normalizeCatalogSelection,
-  selectInitialCatalogItems,
+  reconcileCatalogSelection,
   selectMovieInCatalog,
   selectScreeningInCatalog,
 } from "./catalog-selection";
@@ -68,7 +67,7 @@ const catalog: Catalog = {
 describe("movie reservation domain helpers", () => {
   it("selects the first movie and matching screening for an empty catalog selection", () => {
     expect(
-      selectInitialCatalogItems(catalog, {
+      reconcileCatalogSelection(catalog, {
         movieId: undefined,
         screeningId: undefined,
       }),
@@ -79,45 +78,36 @@ describe("movie reservation domain helpers", () => {
   });
 
   it("keeps an existing catalog selection when catalog data reloads", () => {
-    const normalization = normalizeCatalogSelection(catalog, {
+    const selection = reconcileCatalogSelection(catalog, {
       movieId: "movie-b",
       screeningId: "screening-b1",
     });
 
-    expect(normalization).toEqual({
-      selection: {
-        movieId: "movie-b",
-        screeningId: "screening-b1",
-      },
-      didScreeningChange: false,
+    expect(selection).toEqual({
+      movieId: "movie-b",
+      screeningId: "screening-b1",
     });
   });
 
   it("normalizes stale catalog selections to valid movie and screening ids", () => {
     expect(
-      normalizeCatalogSelection(catalog, {
+      reconcileCatalogSelection(catalog, {
         movieId: "missing-movie",
         screeningId: "missing-screening",
       }),
     ).toEqual({
-      selection: {
-        movieId: "movie-a",
-        screeningId: "screening-a1",
-      },
-      didScreeningChange: true,
+      movieId: "movie-a",
+      screeningId: "screening-a1",
     });
 
     expect(
-      normalizeCatalogSelection(catalog, {
+      reconcileCatalogSelection(catalog, {
         movieId: "movie-b",
         screeningId: "screening-a1",
       }),
     ).toEqual({
-      selection: {
-        movieId: "movie-b",
-        screeningId: "screening-b1",
-      },
-      didScreeningChange: true,
+      movieId: "movie-b",
+      screeningId: "screening-b1",
     });
   });
 

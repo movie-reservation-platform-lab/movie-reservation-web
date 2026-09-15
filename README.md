@@ -3,6 +3,9 @@
 React frontend for clicking through the movie reservation flow while preserving
 the observability headers used by the backend.
 
+New to the repository? Start with the [codebase reading guide](docs/codebase-guide.md)
+for the reservation call path, async lifecycle rules and where to make/test changes.
+
 ## Run With Local Observability
 
 This repository was extracted from

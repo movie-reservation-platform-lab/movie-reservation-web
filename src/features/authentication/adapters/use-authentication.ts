@@ -5,25 +5,38 @@ import type {
   LoginCredentials,
 } from "../application/authentication-provider";
 
-type State =
+export type AuthenticationState =
   | { readonly kind: "restoring" }
   | { readonly kind: "anonymous"; readonly error?: string }
   | { readonly kind: "pending" }
   | { readonly kind: "authenticated"; readonly session: AuthenticationSession };
 
-/** React lifecycle adapter; provider logic is independently replaceable/testable. */
-export function useAuthentication(provider: AuthenticationProvider) {
-  const [state, setState] = useState<State>({ kind: "restoring" });
-  const generation = useRef(0);
-  const pending = useRef<AbortController | undefined>(undefined);
+export interface AuthenticationController {
+  readonly state: AuthenticationState;
+  readonly signIn: (credentials?: LoginCredentials) => Promise<void>;
+  readonly signOut: () => Promise<void>;
+}
+
+// Keep browser timeout delays within the signed 32-bit integer range.
+const maximumTimeoutDelayMs = 2_147_483_647;
+
+/** Restores demo access, handles sign-in/out, and expires the local UI session. */
+export function useAuthentication(
+  provider: AuthenticationProvider,
+): AuthenticationController {
+  const [state, setState] = useState<AuthenticationState>({ kind: "restoring" });
+  // Only the latest restore/sign-in/sign-out may update state. Aborting sign-in
+  // is separate: provider promises can resolve even after cancellation.
+  const activeRunIdRef = useRef(0);
+  const pendingSignInControllerRef = useRef<AbortController | undefined>(undefined);
 
   useEffect(() => {
-    const run = ++generation.current;
+    const runId = ++activeRunIdRef.current;
     setState({ kind: "restoring" });
     void provider
       .restore()
       .then((session) => {
-        if (generation.current === run) {
+        if (activeRunIdRef.current === runId) {
           setState(
             session && session.expiresAt > Date.now()
               ? { kind: "authenticated", session }
@@ -32,63 +45,73 @@ export function useAuthentication(provider: AuthenticationProvider) {
         }
       })
       .catch(() => {
-        if (generation.current === run)
+        if (activeRunIdRef.current === runId) {
           setState({ kind: "anonymous", error: "Please sign in again." });
+        }
       });
     return () => {
-      ++generation.current;
-      pending.current?.abort();
-      pending.current = undefined;
+      ++activeRunIdRef.current;
+      pendingSignInControllerRef.current?.abort();
+      pendingSignInControllerRef.current = undefined;
     };
   }, [provider]);
 
   const signOut = useCallback(async () => {
-    const run = ++generation.current;
-    pending.current?.abort();
-    pending.current = undefined;
+    const runId = ++activeRunIdRef.current;
+    pendingSignInControllerRef.current?.abort();
+    pendingSignInControllerRef.current = undefined;
     setState({ kind: "anonymous" });
     try {
       await provider.signOut();
     } catch {
-      if (generation.current === run)
+      if (activeRunIdRef.current === runId) {
         setState({
           kind: "anonymous",
           error: "Signed out here, but provider logout failed. Close this tab.",
         });
+      }
     }
   }, [provider]);
 
   useEffect(() => {
-    if (state.kind !== "authenticated") return;
+    if (state.kind !== "authenticated") {
+      return;
+    }
     const expiresAt = state.session.expiresAt;
     let timer: number;
-    const expire = () => {
+    const expireOrScheduleSession = () => {
       window.clearTimeout(timer);
-      if (Date.now() >= expiresAt) void signOut();
-      else
+      if (Date.now() >= expiresAt) {
+        void signOut();
+      } else {
         timer = window.setTimeout(
-          expire,
-          Math.min(expiresAt - Date.now(), 2_147_483_647),
+          expireOrScheduleSession,
+          Math.min(expiresAt - Date.now(), maximumTimeoutDelayMs),
         );
+      }
     };
-    expire();
-    window.addEventListener("focus", expire);
+    expireOrScheduleSession();
+    window.addEventListener("focus", expireOrScheduleSession);
     return () => {
       window.clearTimeout(timer);
-      window.removeEventListener("focus", expire);
+      window.removeEventListener("focus", expireOrScheduleSession);
     };
   }, [state, signOut]);
 
   const signIn = useCallback(
     async (credentials?: LoginCredentials) => {
-      if (pending.current) return;
+      if (pendingSignInControllerRef.current) {
+        return;
+      }
       const controller = new AbortController();
-      pending.current = controller;
-      const run = ++generation.current;
+      pendingSignInControllerRef.current = controller;
+      const runId = ++activeRunIdRef.current;
       setState({ kind: "pending" });
       try {
         const result = await provider.signIn(credentials, controller.signal);
-        if (generation.current !== run) return;
+        if (activeRunIdRef.current !== runId) {
+          return;
+        }
         if (
           result.kind === "signed-in" &&
           result.session.expiresAt > Date.now()
@@ -104,13 +127,16 @@ export function useAuthentication(provider: AuthenticationProvider) {
           });
         }
       } catch {
-        if (generation.current === run)
+        if (activeRunIdRef.current === runId) {
           setState({
             kind: "anonymous",
             error: "Sign-in failed. Please retry.",
           });
+        }
       } finally {
-        if (pending.current === controller) pending.current = undefined;
+        if (pendingSignInControllerRef.current === controller) {
+          pendingSignInControllerRef.current = undefined;
+        }
       }
     },
     [provider],

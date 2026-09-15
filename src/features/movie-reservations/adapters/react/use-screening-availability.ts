@@ -5,33 +5,47 @@ import type {
 } from "../../application/screening-availability-api";
 import type { Screening } from "../../domain/movie-reservation";
 
-type State = {
+type ScreeningAvailabilityState = {
   readonly screening: Screening | undefined;
   readonly api: ScreeningAvailabilityApi;
   readonly snapshot?: ScreeningAvailability;
   readonly error?: string;
 };
 
-/** Owns fetch lifecycle and ignores results from superseded screens or refreshes. */
+export interface ScreeningAvailabilityController {
+  readonly refresh: () => Promise<void>;
+  readonly availableSeatIds: ReadonlySet<string>;
+  readonly occupiedSeatIds: ReadonlySet<string>;
+  readonly selectableScreening: Screening | undefined;
+  readonly loading: boolean;
+  readonly error: string | undefined;
+}
+
+/** Refreshes occupancy on selection/focus and discards superseded responses. */
 export function useScreeningAvailability(
   api: ScreeningAvailabilityApi,
   screening: Screening | undefined,
-) {
-  const [state, setState] = useState<State>();
-  const generation = useRef(0);
+): ScreeningAvailabilityController {
+  const [state, setState] = useState<ScreeningAvailabilityState>();
+  // Invalidation ignores an old response; it does not abort the HTTP request.
+  const activeRunIdRef = useRef(0);
   const refresh = useCallback(async () => {
-    const run = ++generation.current;
+    const runId = ++activeRunIdRef.current;
     setState({ screening, api });
-    if (!screening) return;
+    if (!screening) {
+      return;
+    }
     try {
       const snapshot = await api.fetchAvailability(screening.id);
-      if (run !== generation.current) return;
+      if (runId !== activeRunIdRef.current) {
+        return;
+      }
       if (snapshot === null || snapshot.screeningId !== screening.id) {
         throw new Error("Missing or mismatched screening");
       }
       setState({ screening, api, snapshot });
     } catch {
-      if (run === generation.current) {
+      if (runId === activeRunIdRef.current) {
         setState({
           screening,
           api,
@@ -49,30 +63,32 @@ export function useScreeningAvailability(
     };
     window.addEventListener("focus", onFocus);
     return () => {
-      ++generation.current;
+      ++activeRunIdRef.current;
       window.removeEventListener("focus", onFocus);
     };
   }, [refresh]);
 
-  const current =
+  // A reload can replace the screening or API while retaining the screening ID.
+  // Reference equality prevents the old snapshot from enabling seats meanwhile.
+  const currentAvailability =
     state?.screening === screening && state?.api === api ? state : undefined;
   const availableSeatIds = useMemo(
     () =>
       new Set(
-        current?.snapshot?.seats
+        currentAvailability?.snapshot?.seats
           .filter((seat) => seat.available)
           .map((seat) => seat.seatId) ?? [],
       ),
-    [current?.snapshot],
+    [currentAvailability?.snapshot],
   );
   const occupiedSeatIds = useMemo(
     () =>
       new Set(
-        current?.snapshot?.seats
+        currentAvailability?.snapshot?.seats
           .filter((seat) => !seat.available)
           .map((seat) => seat.seatId) ?? [],
       ),
-    [current?.snapshot],
+    [currentAvailability?.snapshot],
   );
   // Unknown seats are never selectable, including omitted response entries.
   const selectableScreening = useMemo(
@@ -88,7 +104,8 @@ export function useScreeningAvailability(
     availableSeatIds,
     occupiedSeatIds,
     selectableScreening,
-    loading: !!screening && !current?.snapshot && !current?.error,
-    error: current?.error,
+    loading:
+      !!screening && !currentAvailability?.snapshot && !currentAvailability?.error,
+    error: currentAvailability?.error,
   };
 }
