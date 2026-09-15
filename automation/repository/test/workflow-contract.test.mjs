@@ -130,6 +130,20 @@ it("selects reviewed v1alpha3 evidence for the exact published ECS digest", () =
   expect(prepareStep).toContain(
     "        with:\n          component: reservation-web\n          github-token: ${{ github.token }}\n",
   );
+
+  const evidenceStep = readWorkflowStep(
+    publishJob,
+    "Attest and publish security evidence",
+  );
+  expect(evidenceStep).toContain(
+    `uses: movie-reservation-platform-lab/movie-platform-actions/actions/container-evidence@${sharedActionsRevision}`,
+  );
+  expect(evidenceStep).toContain(
+    "        with:\n          evidence-version: v1alpha3\n          component: reservation-web\n          digest: ${{ steps.publish.outputs.digest }}\n          github-token: ${{ github.token }}\n",
+  );
+  expect(workflow).not.toMatch(
+    /actions\/create-github-app-token|EVIDENCE_READER_APP_|EXEMPTION_POLICY_READER_APP_/,
+  );
 });
 
 describe("container vulnerability gate", () => {
