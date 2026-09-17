@@ -38,7 +38,6 @@ describe("requestAgentReservation", () => {
       command: {
         moviePreference: "something exciting",
         seatPreference: "aisle",
-        fault: "slow-recommendation",
       },
       workflow,
       runtime: { endpoint: "/api/v1/demo/reserve-recommended-seat" },
@@ -50,11 +49,11 @@ describe("requestAgentReservation", () => {
     const headers = request.headers as Record<string, string>;
 
     expect(endpoint).toBe("/api/v1/demo/reserve-recommended-seat");
-    expect(headers).toMatchObject({
+    expect(headers).toEqual({
+      "X-Request-Id": expect.any(String),
       "Content-Type": "application/json",
       traceparent: workflow.traceparent,
       "X-Correlation-Id": workflow.correlationId,
-      "X-Demo-Fault": "slow-recommendation",
     });
     expect(headers["X-Request-Id"]).toMatch(
       /^ui-AgentReservationUiReserveRecommendedSeat-/,
@@ -63,13 +62,12 @@ describe("requestAgentReservation", () => {
       JSON.stringify({
         movie_preference: "something exciting",
         seat_preference: "aisle",
-        fault: "slow-recommendation",
       }),
     );
   });
 
-  it("returns controlled dependency failures as structured results", async () => {
-    stubFetch(502, {
+  it("returns dependency failures as structured results", async () => {
+    const fetchMock = stubFetch(502, {
       error: "demo_dependency_failed",
       message: "recommendation_dependency_failed",
       workflow_id: "workflow-2",
@@ -84,13 +82,19 @@ describe("requestAgentReservation", () => {
       command: {
         moviePreference: "something exciting",
         seatPreference: "aisle",
-        fault: "recommendation-error",
       },
       workflow,
       runtime: { endpoint: "/api/v1/demo/reserve-recommended-seat" },
     });
 
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).toEqual({
+      "Content-Type": "application/json",
+      traceparent: workflow.traceparent,
+      "X-Correlation-Id": workflow.correlationId,
+      "X-Request-Id": result.requestId,
+    });
     expect(result).toMatchObject({
+      correlationId: workflow.correlationId,
       ok: false,
       statusCode: 502,
       error: {
@@ -101,6 +105,22 @@ describe("requestAgentReservation", () => {
     });
   });
 
+  it("does not serialize legacy fault fields supplied at runtime", async () => {
+    const fetchMock = stubFetch(502, {
+      error: "dependency_failed", message: "Unavailable", workflow_id: "workflow-3",
+      trace: { trace_id: workflow.traceId, correlation_id: workflow.correlationId, request_id: "request-3" },
+    });
+    const command = {
+      moviePreference: "A movie", seatPreference: "aisle",
+      fault: "recommendation-error", token: "private-token",
+    };
+    await requestAgentReservation({ command, workflow });
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      movie_preference: "A movie", seat_preference: "aisle",
+    });
+    expect(fetchMock.mock.calls[0]?.[1]?.headers).not.toHaveProperty("X-Demo-Fault");
+  });
+
   it("rejects malformed agent responses", async () => {
     stubFetch(200, { outcome: "confirmed" });
 
@@ -109,7 +129,6 @@ describe("requestAgentReservation", () => {
         command: {
           moviePreference: "something exciting",
           seatPreference: "aisle",
-          fault: "none",
         },
         workflow,
         runtime: { endpoint: "/api/v1/demo/reserve-recommended-seat" },
