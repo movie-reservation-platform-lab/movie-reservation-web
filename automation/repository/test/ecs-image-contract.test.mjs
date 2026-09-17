@@ -22,7 +22,8 @@ describe("temporary ECS image contract", () => {
     expect(nginxConfig).toContain("proxy_set_header traceparent");
     expect(nginxConfig).toContain("proxy_set_header X-Correlation-Id");
     expect(nginxConfig).toContain("proxy_set_header X-Request-Id");
-    expect(nginxConfig).toContain("proxy_set_header X-Demo-Fault");
+    expect(nginxConfig).toContain('proxy_set_header X-Demo-Fault "";');
+    expect(nginxConfig).not.toContain("$http_x_demo_fault");
   });
 
   it("routes exact credential-check paths and preserves native and W3C context", () => {

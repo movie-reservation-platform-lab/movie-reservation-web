@@ -3,12 +3,9 @@ import {
   type DemoTraceContext,
 } from "../observability/trace-context";
 
-export type DemoFault = "none" | "slow-recommendation" | "recommendation-error";
-
 export interface AgentReservationCommand {
   readonly moviePreference: string;
   readonly seatPreference: string;
-  readonly fault: DemoFault;
 }
 
 export interface AgentTrace {
@@ -68,6 +65,7 @@ interface AgentRequestInput {
   readonly command: AgentReservationCommand;
   readonly workflow: DemoTraceContext;
   readonly runtime?: AgentRuntimeConfig;
+  readonly signal?: AbortSignal;
 }
 
 export async function requestAgentReservation(
@@ -79,17 +77,16 @@ export async function requestAgentReservation(
 
   const response = await fetch(runtime.endpoint, {
     method: "POST",
+    signal: input.signal,
     headers: {
       "Content-Type": "application/json",
       traceparent: input.workflow.traceparent,
       "X-Correlation-Id": input.workflow.correlationId,
       "X-Request-Id": requestId,
-      "X-Demo-Fault": input.command.fault,
     },
     body: JSON.stringify({
       movie_preference: input.command.moviePreference,
       seat_preference: input.command.seatPreference,
-      fault: input.command.fault,
     }),
   });
   const durationMs = performance.now() - started;

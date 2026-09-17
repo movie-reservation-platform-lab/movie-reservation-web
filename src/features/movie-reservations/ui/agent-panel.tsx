@@ -9,7 +9,6 @@ import {
 
 import type {
   AgentReservationCallResult,
-  DemoFault,
 } from "../../../platform/api/agent-client";
 import type { DemoTraceContext } from "../../../platform/observability/trace-context";
 import {
@@ -24,15 +23,6 @@ interface AgentPanelProps {
   readonly onAgentCompleted: (result: AgentReservationCallResult) => void;
   readonly bookingBusy: boolean;
 }
-
-const faultOptions: readonly {
-  readonly value: DemoFault;
-  readonly label: string;
-}[] = [
-  { value: "none", label: "Normal" },
-  { value: "slow-recommendation", label: "Slow recommendation" },
-  { value: "recommendation-error", label: "Recommendation error" },
-];
 
 export function AgentPanel({
   workflow,
@@ -68,7 +58,7 @@ export function AgentPanel({
         </button>
       </div>
 
-      <div className="prompt-presets" aria-label="Agent scenarios">
+      <div className="prompt-presets" aria-label="Booking suggestions">
         {agentPromptPresets.map((preset) => (
           <button
             key={preset.id}
@@ -107,21 +97,6 @@ export function AgentPanel({
               }
             />
           </label>
-          <label className="field-group">
-            <span>Fault</span>
-            <select
-              value={agent.fault}
-              onChange={(event) =>
-                agent.setFault(event.currentTarget.value as DemoFault)
-              }
-            >
-              {faultOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
         </div>
 
         {agent.error !== undefined ? (
@@ -139,6 +114,15 @@ export function AgentPanel({
           Ask agent
         </button>
       </form>
+
+      <label className="field-group">
+        <span>Diagnostic reference</span>
+        <textarea
+          readOnly
+          rows={3}
+          value={`Correlation: ${workflow.correlationId}\nTrace: ${workflow.traceId}${agent.latestResult ? `\nRequest: ${agent.latestResult.requestId}` : ""}`}
+        />
+      </label>
 
       {agent.isRunning ? (
         <div
@@ -172,9 +156,12 @@ function AgentResultCard({
       <div className="agent-result agent-result--error" role="status">
         <div className="agent-result__heading">
           <AlertTriangle aria-hidden="true" size={18} />
-          <strong>{result.error.error}</strong>
+          <strong>Agent booking failed</strong>
         </div>
-        <p>{result.error.message}</p>
+        <p>
+          Could not complete the agent booking. Check your reservations before
+          trying again.
+        </p>
         <AgentRunMeta result={result} />
       </div>
     );

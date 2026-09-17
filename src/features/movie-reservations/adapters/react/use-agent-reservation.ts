@@ -3,42 +3,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   requestAgentReservation,
   type AgentReservationCallResult,
-  type DemoFault,
 } from "../../../../platform/api/agent-client";
 import type { DemoTraceContext } from "../../../../platform/observability/trace-context";
-import { reportFrontendError } from "../errors/user-facing-errors";
 
 export interface AgentPromptPreset {
   readonly id: string;
   readonly label: string;
   readonly prompt: string;
   readonly seatPreference: string;
-  readonly fault: DemoFault;
 }
 
 export const agentPromptPresets: readonly AgentPromptPreset[] = [
   {
     id: "happy",
-    label: "Happy path",
+    label: "Book an aisle seat",
     prompt:
       "Find me an exciting movie and reserve a good available aisle seat.",
     seatPreference: "aisle",
-    fault: "none",
-  },
-  {
-    id: "slow",
-    label: "Slow dependency",
-    prompt:
-      "Recommend an exciting movie and trigger the slow recommendation path.",
-    seatPreference: "aisle",
-    fault: "slow-recommendation",
-  },
-  {
-    id: "error",
-    label: "Failing dependency",
-    prompt: "Try a recommendation while the recommendation service is failing.",
-    seatPreference: "aisle",
-    fault: "recommendation-error",
   },
 ];
 
@@ -50,13 +31,11 @@ interface UseAgentReservationInput {
 export interface AgentReservationPanelState {
   readonly prompt: string;
   readonly seatPreference: string;
-  readonly fault: DemoFault;
   readonly isRunning: boolean;
   readonly error: string | undefined;
   readonly latestResult: AgentReservationCallResult | undefined;
   readonly setPrompt: (prompt: string) => void;
   readonly setSeatPreference: (seatPreference: string) => void;
-  readonly setFault: (fault: DemoFault) => void;
   readonly applyPreset: (preset: AgentPromptPreset) => void;
   readonly runAgent: () => Promise<void>;
   readonly clearAgentState: () => void;
@@ -71,9 +50,6 @@ export function useAgentReservation({
   const [seatPreference, setSeatPreference] = useState(
     agentPromptPresets[0]?.seatPreference ?? "aisle",
   );
-  const [fault, setFault] = useState<DemoFault>(
-    agentPromptPresets[0]?.fault ?? "none",
-  );
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string>();
   const [latestResult, setLatestResult] =
@@ -82,6 +58,7 @@ export function useAgentReservation({
   // Run IDs invalidate callbacks; the ref lock prevents two calls before React
   // has rendered the isRunning state. Neither ref represents a backend ID.
   const activeRunIdRef = useRef(0);
+  const activeRequestRef = useRef<AbortController | undefined>(undefined);
   const isRequestRunningRef = useRef(false);
   useEffect(() => {
     onCompletedRef.current = onCompleted;
@@ -92,6 +69,7 @@ export function useAgentReservation({
     setError(undefined);
     return () => {
       ++activeRunIdRef.current;
+      activeRequestRef.current?.abort();
       isRequestRunningRef.current = false;
     };
   }, [workflow]);
@@ -99,7 +77,6 @@ export function useAgentReservation({
   const applyPreset = useCallback((preset: AgentPromptPreset) => {
     setPrompt(preset.prompt);
     setSeatPreference(preset.seatPreference);
-    setFault(preset.fault);
     setError(undefined);
   }, []);
 
@@ -122,16 +99,19 @@ export function useAgentReservation({
     }
 
     const runId = ++activeRunIdRef.current;
+    const controller = new AbortController();
+    activeRequestRef.current = controller;
+    setLatestResult(undefined);
     isRequestRunningRef.current = true;
     setIsRunning(true);
     setError(undefined);
     try {
       const result = await requestAgentReservation({
         workflow,
+        signal: controller.signal,
         command: {
           moviePreference: trimmedPrompt,
           seatPreference: trimmedSeatPreference,
-          fault,
         },
       });
       if (activeRunIdRef.current !== runId) {
@@ -139,15 +119,12 @@ export function useAgentReservation({
       }
       setLatestResult(result);
       onCompletedRef.current?.(result);
-    } catch (agentError) {
+    } catch {
       if (activeRunIdRef.current !== runId) {
         return;
       }
-      reportFrontendError("Agent request failed", agentError);
       setError(
-        agentError instanceof Error
-          ? agentError.message
-          : "Agent request failed before a structured response was returned.",
+        "Could not complete the agent request. Check your reservations before trying again.",
       );
     } finally {
       if (activeRunIdRef.current === runId) {
@@ -155,18 +132,16 @@ export function useAgentReservation({
         setIsRunning(false);
       }
     }
-  }, [fault, prompt, seatPreference, workflow]);
+  }, [prompt, seatPreference, workflow]);
 
   return {
     prompt,
     seatPreference,
-    fault,
     isRunning,
     error,
     latestResult,
     setPrompt,
     setSeatPreference,
-    setFault,
     applyPreset,
     runAgent,
     clearAgentState,
