@@ -117,7 +117,8 @@ npm run check
 4. Select one or more seats.
 5. Request a reservation.
 6. Watch polling move the request into a terminal state.
-7. Run the agent happy, slow, or controlled-error scenario.
+7. Ask the agent to recommend a movie and book a seat. If it fails, check
+   reservations before retrying and copy the diagnostic reference for investigation.
 8. Use the browser network panel to inspect the emitted propagation headers,
    then search for the workflow in Grafana/Tempo/Loki. A future Playwright
    smoke test should capture the same workflow in an automated report.
@@ -153,8 +154,9 @@ task-local network namespace:
 
 The proxy explicitly preserves `traceparent`, `tracestate`,
 `X-Correlation-Id`, `X-Request-Id`, and native `X-Amzn-Trace-Id` / `X-Amz-Cf-Id`
-headers when received. The existing reservation and agent routes also preserve
-`X-Demo-Fault`. Inspect propagation in the browser network panel; the audit
+headers when received. The reservation and agent routes strip the retired
+`X-Demo-Fault` header. Backend services must independently reject unsupported
+fault inputs; removing browser controls is not authorization. Inspect propagation in the browser network panel; the audit
 screen shows validated response IDs, not raw backend diagnostics.
 
 Build and smoke the image locally:
@@ -256,3 +258,16 @@ Canonical assistant guidance lives in `.ai/`, with the root `AGENTS.md` index
 tracked for discovery. Generated `.claude/`, `.codex/`, `.cursor/`, `.gemini/`
 and `.roo/` folders are ignored. Run `bash .ai/sync.sh` after editing canonical
 guidance; see [.ai/README.md](.ai/README.md).
+
+## Frontend observability scope
+
+The browser propagates trace, correlation, and request identifiers and exposes a
+selectable diagnostic reference for agent calls. Requests contain ordinary movie
+and seat preferences, without fault fields or headers. Diagnostic references
+contain identifiers only, not prompts, credentials, or raw backend errors.
+
+Web-container health, access logs, and runtime metrics describe the temporary
+Nginx container. They do not measure browser request rate, errors, or duration
+(RED), nor establish browser RUM coverage. Browser network evidence and backend
+traces can verify propagation; downstream acceptance remains an integration
+check. No RUM vendor is installed by this change.
